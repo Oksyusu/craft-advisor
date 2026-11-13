@@ -6,6 +6,7 @@
 1. `docs/specs/00-mvp-spec.md`: 1차 버전 사양서(딥 인터뷰 결과, 모호도 17%). 원본은 `C:\KUH_Workplace\specs\`
 2. `docs/feature-research.md`: 도입 후보 기능 7가지(원본 모드, 역할, 도입 이유, 구현 방향)
 3. `docs/index.html`: 현재 구조, 작동 방식, 집에서 확인하는 방법
+4. `docs/commands.md`: 명령어 목록과 명령어별 작동 흐름 다이어그램(사양서 01~05, 07 반영)
 
 ## 현재 상태
 - **코드:** 1차 버전 구현 완료. 로컬과 GitHub Actions에서 빌드가 통과하고, 단위 테스트 14개도 통과합니다.
