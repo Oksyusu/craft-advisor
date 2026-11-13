@@ -5,7 +5,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * An AI backend. Calls never block the caller; futures complete on a background thread and fail
- * with {@link AiException}. Only Claude is implemented; other providers can be added behind this.
+ * with {@link AiException}. Implemented by {@link ClaudeProvider} and {@link OpenAiCompatibleProvider} (also Ollama).
  */
 public interface AiProvider {
 

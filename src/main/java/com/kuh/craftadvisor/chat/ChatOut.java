@@ -138,7 +138,7 @@ public final class ChatOut {
      * Underlined item name that opens its JEI recipes via /ai show. Chat only, never the clipboard.
      * Non-item ingredients (fluids, ...) stay plain text: /ai show can only open item recipes for now.
      */
-    private static Component link(IngredientKey item) {
+    public static Component link(IngredientKey item) {
         if (!item.isItem()) {
             return Items.nameOf(item);
         }

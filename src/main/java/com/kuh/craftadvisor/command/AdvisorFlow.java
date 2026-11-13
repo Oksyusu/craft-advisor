@@ -14,9 +14,10 @@ import com.kuh.craftadvisor.CraftAdvisor;
 import com.kuh.craftadvisor.RecipePreferencesFile;
 import com.kuh.craftadvisor.ai.AiException;
 import com.kuh.craftadvisor.ai.AiProvider;
-import com.kuh.craftadvisor.ai.ClaudeProvider;
 import com.kuh.craftadvisor.ai.ItemPick;
 import com.kuh.craftadvisor.ai.OutgoingRequest;
+import com.kuh.craftadvisor.ai.ProviderSettings;
+import com.kuh.craftadvisor.ai.Providers;
 import com.kuh.craftadvisor.ai.ToolLoop;
 import com.kuh.craftadvisor.ai.ToolSpec;
 import com.kuh.craftadvisor.chat.ChatOut;
@@ -47,6 +48,7 @@ final class AdvisorFlow {
     private static final int MAX_HISTORY_TURNS = 12;
     private static final int PREVIEW_LINES = 3;
     private static final int PREVIEW_LINE_CHARS = 120;
+    private static final int SIMILAR_ITEMS = 5;
     /** Recent free-question turns; only touched on the client thread. */
     private static final Deque<AiProvider.Turn> HISTORY = new ArrayDeque<>();
     /** The one AI step held until /ai consent; only touched on the client thread. */
@@ -68,7 +70,7 @@ final class AdvisorFlow {
             return;
         }
         if (ai.isEmpty()) {
-            ChatOut.error("craftadvisor.msg.need_key", query);
+            explainNoAi(query, found);
             return;
         }
         if (!consented(() -> start(query))) {
@@ -99,11 +101,11 @@ final class AdvisorFlow {
             }
             CraftPlanner planner = new CraftPlanner(new JeiRecipeSource(runtime.get()), RecipePreferencesFile.load());
             CraftPlan plan = planner.plan(found.exact().get().key(), TARGET_AMOUNT, inventory(runtime.get()));
-            showPreview(OutgoingRequest.advice(ClaudeProvider.HOST, query, plan, planner, sharing(), AdvisorFlow::name));
+            showPreview(OutgoingRequest.advice(host(), query, plan, planner, sharing(), AdvisorFlow::name));
             return;
         }
         if (ai.isEmpty()) {
-            ChatOut.error("craftadvisor.msg.need_key", query);
+            explainNoAi(query, found);
             return;
         }
         showPreview(found.candidates().isEmpty() ? chatRequest(query, sharing()) : pickRequest(query, found));
@@ -111,9 +113,14 @@ final class AdvisorFlow {
 
     /** Saves consent for the current host and runs the held AI step, if any. */
     static void consent() {
-        ClientConfig.CONSENTED_HOST.set(ClaudeProvider.HOST);
+        ProviderSettings settings = Providers.current();
+        if (settings.status() != ProviderSettings.Status.READY) {
+            showProviderProblem(settings.status());
+            return;
+        }
+        ClientConfig.CONSENTED_HOST.set(settings.host());
         ClientConfig.CONSENTED_HOST.save();
-        ChatOut.info("craftadvisor.consent.saved", ClaudeProvider.HOST);
+        ChatOut.info("craftadvisor.consent.saved", settings.host());
         Runnable pending = pendingAfterConsent;
         pendingAfterConsent = null;
         if (pending != null) {
@@ -136,13 +143,13 @@ final class AdvisorFlow {
             onFound.accept(found.exact().get().key());
             return;
         }
-        Optional<AiProvider> ai = provider();
-        if (ai.isEmpty()) {
-            ChatOut.error("craftadvisor.msg.need_key", query);
-            return;
-        }
         if (found.candidates().isEmpty()) {
             ChatOut.error("craftadvisor.list.not_found", query);
+            return;
+        }
+        Optional<AiProvider> ai = provider();
+        if (ai.isEmpty()) {
+            explainNoAi(query, found);
             return;
         }
         if (!consented(() -> findGoal(query, onFound))) {
@@ -185,7 +192,7 @@ final class AdvisorFlow {
         MaterialOutput.show(plan);
 
         if (ai.isEmpty()) {
-            ChatOut.info("craftadvisor.msg.advice_needs_key");
+            showProviderProblem(Providers.current().status());
             return;
         }
         if (!consented(() -> adviseAfterConsent(target, query))) {
@@ -202,7 +209,7 @@ final class AdvisorFlow {
         Optional<IJeiRuntime> runtime = CraftAdvisorJeiPlugin.runtime();
         Optional<AiProvider> ai = provider();
         if (runtime.isEmpty() || ai.isEmpty()) {
-            ChatOut.info("craftadvisor.msg.advice_needs_key");
+            showProviderProblem(Providers.current().status());
             return;
         }
         CraftPlanner planner = new CraftPlanner(new JeiRecipeSource(runtime.get()), RecipePreferencesFile.load());
@@ -211,7 +218,7 @@ final class AdvisorFlow {
     }
 
     private static OutgoingRequest adviceRequest(String query, CraftPlan plan, CraftPlanner planner) {
-        return OutgoingRequest.advice(ClaudeProvider.HOST, query, plan, planner, sharing(), AdvisorFlow::name);
+        return OutgoingRequest.advice(host(), query, plan, planner, sharing(), AdvisorFlow::name);
     }
 
     private static void advise(AiProvider ai, OutgoingRequest request) {
@@ -245,11 +252,11 @@ final class AdvisorFlow {
 
     private static OutgoingRequest pickRequest(String query, ItemCandidates.Result found) {
         List<String> lines = found.candidates().stream().map(c -> c.key().uid() + " | " + c.name()).toList();
-        return OutgoingRequest.pick(ClaudeProvider.HOST, query, lines);
+        return OutgoingRequest.pick(host(), query, lines);
     }
 
     private static OutgoingRequest chatRequest(String question, OutgoingRequest.Sharing sharing) {
-        return OutgoingRequest.chat(ClaudeProvider.HOST, question, List.copyOf(HISTORY), sharing,
+        return OutgoingRequest.chat(host(), question, List.copyOf(HISTORY), sharing,
                 AdvisorTools.offered(sharing), AdvisorTools.off(sharing));
     }
 
@@ -257,13 +264,17 @@ final class AdvisorFlow {
         return new OutgoingRequest.Sharing(ClientConfig.SHARE_INVENTORY.get(), ClientConfig.SHARE_HISTORY.get());
     }
 
-    /** True when the player agreed to send to the current host; otherwise holds {@code pending} and explains. */
+    /**
+     * True when requests stay on this computer or the player agreed to send to the current host (asked again when
+     * the host changes); otherwise holds {@code pending} and explains.
+     */
     private static boolean consented(Runnable pending) {
-        if (ClaudeProvider.HOST.equals(ClientConfig.CONSENTED_HOST.get())) {
+        ProviderSettings settings = Providers.current();
+        if (settings.isLocal() || settings.host().equals(ClientConfig.CONSENTED_HOST.get())) {
             return true;
         }
         pendingAfterConsent = pending;
-        ChatOut.info("craftadvisor.consent.header", ClaudeProvider.HOST);
+        ChatOut.info("craftadvisor.consent.header", settings.host());
         ChatOut.info("craftadvisor.consent.sends");
         if (ClientConfig.SHARE_INVENTORY.get()) {
             ChatOut.info("craftadvisor.consent.sends_inventory");
@@ -299,12 +310,54 @@ final class AdvisorFlow {
         }
     }
 
+    /** Empty when the settings do not allow AI calls (offline, no key, bad baseUrl, no model name). */
     private static Optional<AiProvider> provider() {
-        String key = ClientConfig.API_KEY.get();
-        if (key == null || key.isBlank()) {
-            return Optional.empty();
+        ProviderSettings settings = Providers.current();
+        return settings.status() == ProviderSettings.Status.READY ? Optional.of(settings.create()) : Optional.empty();
+    }
+
+    /** Where AI requests go with the current settings. */
+    private static String host() {
+        return Providers.current().host();
+    }
+
+    /** No exact item and no usable AI: similar names (offline or no key), or why the AI cannot be used. */
+    private static void explainNoAi(String query, ItemCandidates.Result found) {
+        ProviderSettings.Status status = Providers.current().status();
+        switch (status) {
+            case OFFLINE -> {
+                if (found.candidates().isEmpty()) {
+                    ChatOut.info("craftadvisor.offline.no_free_question");
+                } else {
+                    showSimilar(query, found);
+                }
+            }
+            case NO_KEY -> {
+                ChatOut.error("craftadvisor.msg.need_key", query);
+                if (!found.candidates().isEmpty()) {
+                    showSimilar(query, found);
+                }
+            }
+            default -> showProviderProblem(status);
         }
-        return Optional.of(new ClaudeProvider(key.strip(), ClientConfig.MODEL.get(), ClientConfig.ADVICE_MAX_TOKENS.get()));
+    }
+
+    private static void showSimilar(String query, ItemCandidates.Result found) {
+        ChatOut.info("craftadvisor.offline.similar", query);
+        found.candidates().stream().limit(SIMILAR_ITEMS)
+                .forEach(candidate -> ChatOut.info("craftadvisor.offline.similar_line", ChatOut.link(candidate.key())));
+    }
+
+    /** Why AI advice and questions are off with the current settings. */
+    private static void showProviderProblem(ProviderSettings.Status status) {
+        switch (status) {
+            case OFFLINE -> ChatOut.info("craftadvisor.provider.offline");
+            case NO_KEY -> ChatOut.info("craftadvisor.msg.advice_needs_key");
+            case BAD_BASE_URL -> ChatOut.error("craftadvisor.provider.bad_base_url");
+            case NO_MODEL -> ChatOut.error("craftadvisor.provider.no_model");
+            case READY -> {
+            }
+        }
     }
 
     /** Completes on the client thread; failures become a chat message. */

@@ -40,4 +40,10 @@ final class Prompts {
             which shows the materials and the JEI recipe in game.
             - If the inventory is not shared, do not guess what the player has.
             Answer in the same language as the question, in at most 6 short lines of plain text, no markdown.""";
+
+    /** Sent once after an item pick that was not the requested JSON; {@code %s} is what was wrong. */
+    static final String PICK_RETRY = """
+            Your answer could not be used: %s. Reply with only a JSON object and nothing else: \
+            {"intent": "craft" or "question", "itemId": "<an id from the candidate list, or empty>", \
+            "reason": "<one short sentence>"}""";
 }

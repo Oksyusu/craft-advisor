@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
  */
 public final class ToolLoop {
     static final String LIMIT_REACHED = "Tool call limit reached; answer with the results you already have.";
+    static final String BAD_ARGUMENTS = "The arguments were not a valid JSON object; call the tool again with a JSON object.";
 
     /** Runs tool calls in order and returns one result per call (on whatever thread the data lives on). */
     @FunctionalInterface
@@ -59,7 +60,7 @@ public final class ToolLoop {
             }
             List<ToolCall> calls = reply.message().calls();
             int allowed = Math.min(calls.size(), maxToolCalls - used);
-            List<ToolCall> known = calls.subList(0, allowed).stream().filter(c -> toolNames.contains(c.name())).toList();
+            List<ToolCall> known = calls.subList(0, allowed).stream().filter(this::runnable).toList();
             return executor.execute(known).thenCompose(results -> {
                 List<AgentMessage> next = new ArrayList<>(messages);
                 next.add(reply.message());
@@ -69,7 +70,11 @@ public final class ToolLoop {
         });
     }
 
-    /** One result per call, in the order the AI made them; unknown tools and calls over the limit get errors. */
+    private boolean runnable(ToolCall call) {
+        return toolNames.contains(call.name()) && call.input() != null;
+    }
+
+    /** One result per call, in the order the AI made them; unknown tools, bad arguments and calls over the limit get errors. */
     private List<ToolResult> inCallOrder(List<ToolCall> calls, int allowed, List<ToolResult> executed) {
         List<ToolResult> results = new ArrayList<>();
         int next = 0;
@@ -79,6 +84,8 @@ public final class ToolLoop {
                 results.add(ToolResult.error(call.id(), LIMIT_REACHED));
             } else if (!toolNames.contains(call.name())) {
                 results.add(ToolResult.error(call.id(), "Unknown tool: " + call.name() + ". Available: " + toolNames));
+            } else if (call.input() == null) {
+                results.add(ToolResult.error(call.id(), BAD_ARGUMENTS));
             } else {
                 results.add(executed.get(next++));
             }
