@@ -15,7 +15,12 @@ record GoalInput(String name, int amount) {
     private static final int DEFAULT_AMOUNT = 1;
     /** Longer digit runs are out of range anyway; this keeps parseInt from overflowing. */
     private static final int MAX_DIGITS = 4;
-    private static final Pattern COUNT = Pattern.compile("(?:^|\\s)(?:[xX×](\\d+)|(\\d+)\\s?개)\\s*$");
+    /**
+     * {@code x4} may touch a name that does not end in a Latin letter, digit, {@code _} or {@code :} ("피스톤x10",
+     * not "box10" or "mod:tier_x2"); {@code ×4} and {@code 4개} may touch any name ("피스톤10개").
+     */
+    private static final Pattern COUNT = Pattern.compile(
+            "(?:(?<![A-Za-z0-9_:])[xX](\\d+)|×\\s?(\\d+)|(?<!\\d)(\\d+)\\s?개)\\s*$");
 
     /** Empty when a count is written but outside {@value #MIN_AMOUNT}..{@value #MAX_AMOUNT}. The name may be blank. */
     static Optional<GoalInput> parse(String text) {
@@ -24,7 +29,8 @@ record GoalInput(String name, int amount) {
         if (!matcher.find()) {
             return Optional.of(new GoalInput(stripped, DEFAULT_AMOUNT));
         }
-        String digits = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+        String digits = matcher.group(1) != null ? matcher.group(1)
+                : matcher.group(2) != null ? matcher.group(2) : matcher.group(3);
         if (digits.length() > MAX_DIGITS) {
             return Optional.empty();
         }

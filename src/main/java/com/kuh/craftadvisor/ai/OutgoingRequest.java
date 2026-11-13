@@ -87,6 +87,12 @@ public record OutgoingRequest(String host, Route route, List<AiProvider.Turn> hi
         return new OutgoingRequest(host, Route.CHAT, sharing.history() ? history : List.of(), sections, tools, toolsOff);
     }
 
+    /** The AI's own item search for /ai add: only {@code tools} (item search), no history and no inventory. */
+    public static OutgoingRequest findItem(String host, String instruction, List<ToolSpec> tools) {
+        return new OutgoingRequest(host, Route.CHAT, List.of(), List.of(new Section("request", instruction)),
+                tools, List.of());
+    }
+
     /** The plan as the AI sees it; numbers are the planner's, never changed. */
     public static String planJson(CraftPlan plan, Function<IngredientKey, String> names) {
         Map<String, Object> json = Map.of(

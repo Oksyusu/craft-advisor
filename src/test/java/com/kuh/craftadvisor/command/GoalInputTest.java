@@ -47,6 +47,20 @@ class GoalInputTest {
     }
 
     @Test
+    void aCountTouchingANonLatinNameIsStillTheCount() {
+        assertEquals(parsed("접착 피스톤", 10), GoalInput.parse("접착 피스톤x10"));
+        assertEquals(parsed("끈끈이 피스톤", 10), GoalInput.parse("끈끈이 피스톤10개"));
+        assertEquals(parsed("piston", 3), GoalInput.parse("piston×3"));
+        assertEquals(Optional.empty(), GoalInput.parse("피스톤12345개"));
+    }
+
+    @Test
+    void anXInsideALatinWordOrIdIsPartOfTheName() {
+        assertEquals(parsed("pistonx4", 1), GoalInput.parse("pistonx4"));
+        assertEquals(parsed("mod:tier_x2", 1), GoalInput.parse("mod:tier_x2"));
+    }
+
+    @Test
     void countAloneLeavesTheNameBlank() {
         assertEquals(parsed("", 4), GoalInput.parse("x4"));
     }

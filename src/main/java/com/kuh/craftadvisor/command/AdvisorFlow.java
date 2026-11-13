@@ -141,8 +141,9 @@ final class AdvisorFlow {
     }
 
     /**
-     * Item lookup for /ai add: an exact name or id, else the AI's pick (with a key and consent). Unlike
-     * {@link #start}, a question or an unknown pick only says the item was not found; it is never answered.
+     * Item lookup for /ai add: an exact name or id, else the AI's pick among the name matches, else the AI's own
+     * JEI search ({@link ItemSearch}) for names that only describe the item (with a key and consent). Unlike
+     * {@link #start}, a question is never answered; it only says the item was not found.
      */
     static void findGoal(String query, Consumer<IngredientKey> onFound) {
         Optional<IJeiRuntime> runtime = CraftAdvisorJeiPlugin.runtime();
@@ -155,26 +156,30 @@ final class AdvisorFlow {
             onFound.accept(found.exact().get().key());
             return;
         }
-        if (found.candidates().isEmpty()) {
-            ChatOut.error("craftadvisor.list.not_found", query);
-            return;
-        }
         Optional<AiProvider> ai = provider();
         if (ai.isEmpty()) {
-            explainNoAi(query, found);
+            if (found.candidates().isEmpty()) {
+                ChatOut.error("craftadvisor.list.not_found", query);
+            } else {
+                explainNoAi(query, found);
+            }
             return;
         }
         if (!consented(() -> findGoal(query, onFound))) {
             return;
         }
         ChatOut.info("craftadvisor.msg.searching", query);
+        if (found.candidates().isEmpty()) {
+            ItemSearch.run(ai.get(), query, onFound);
+            return;
+        }
         onClientThread(ai.get().pickItem(pickRequest(query, found)), pick -> {
             boolean known = pick.wantsCraft()
                     && found.candidates().stream().anyMatch(c -> c.key().uid().equals(pick.itemId()));
             if (known) {
                 onFound.accept(IngredientKey.item(pick.itemId()));
             } else {
-                ChatOut.error("craftadvisor.list.not_found", query);
+                ItemSearch.run(ai.get(), query, onFound);
             }
         });
     }
@@ -272,7 +277,7 @@ final class AdvisorFlow {
                 AdvisorTools.offered(sharing), AdvisorTools.off(sharing));
     }
 
-    private static OutgoingRequest.Sharing sharing() {
+    static OutgoingRequest.Sharing sharing() {
         return new OutgoingRequest.Sharing(ClientConfig.SHARE_INVENTORY.get(), ClientConfig.SHARE_HISTORY.get());
     }
 
@@ -329,7 +334,7 @@ final class AdvisorFlow {
     }
 
     /** Where AI requests go with the current settings. */
-    private static String host() {
+    static String host() {
         return Providers.current().host();
     }
 
@@ -373,7 +378,7 @@ final class AdvisorFlow {
     }
 
     /** Completes on the client thread; failures become a chat message. */
-    private static <T> void onClientThread(CompletableFuture<T> future, Consumer<T> onSuccess) {
+    static <T> void onClientThread(CompletableFuture<T> future, Consumer<T> onSuccess) {
         future.whenComplete((value, error) -> Minecraft.getInstance().execute(() -> {
             if (error != null) {
                 showAiError(AiException.from(error));

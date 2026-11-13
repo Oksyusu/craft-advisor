@@ -84,6 +84,11 @@ public final class AdvisorTools {
                 : List.of(SEARCH_SPEC, RECIPES_SPEC, MISSING_SPEC);
     }
 
+    /** Only search_items: for finding one item by its meaning (/ai add), which needs no other game data. */
+    public static List<ToolSpec> searchOnly() {
+        return List.of(SEARCH_SPEC);
+    }
+
     /** Tools left out by {@code sharing}, for the preview. */
     public static List<String> off(OutgoingRequest.Sharing sharing) {
         return sharing.inventory() ? List.of() : List.of(GET_INVENTORY);

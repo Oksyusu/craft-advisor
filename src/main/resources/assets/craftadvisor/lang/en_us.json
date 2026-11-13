@@ -107,5 +107,6 @@
   "craftadvisor.provider.offline": "Offline mode: no AI advice. Materials, the JEI recipe and the clipboard still work.",
   "craftadvisor.provider.bad_base_url": "baseUrl is not allowed and nothing was sent: it must start with https:// (http:// only for localhost, 127.0.0.1 or ::1). Fix it in config/craftadvisor-client.toml.",
   "craftadvisor.provider.no_model": "Set the model name: put your model in \"model\" in config/craftadvisor-client.toml.",
-  "craftadvisor.ai.unsupported": "This model does not support tool calls or JSON answers (%s). Materials and the clipboard still work."
+  "craftadvisor.ai.unsupported": "This model does not support tool calls or JSON answers (%s). Materials and the clipboard still work.",
+  "craftadvisor.list.searching_more": "The name is not exact, so the AI is searching JEI for what you meant: %s"
 }

@@ -107,5 +107,6 @@
   "craftadvisor.provider.offline": "오프라인 모드: AI 조언 없이 재료, JEI 레시피, 클립보드만 동작합니다.",
   "craftadvisor.provider.bad_base_url": "baseUrl 설정을 쓸 수 없어 아무것도 보내지 않았습니다. https://로 시작해야 하고, http://는 localhost·127.0.0.1·::1만 됩니다. config/craftadvisor-client.toml에서 고치세요.",
   "craftadvisor.provider.no_model": "모델 이름을 설정하세요: config/craftadvisor-client.toml의 \"model\"에 쓸 모델 이름을 넣으세요.",
-  "craftadvisor.ai.unsupported": "이 모델은 도구 호출이나 JSON 답을 지원하지 않습니다 (%s). 재료 계산과 클립보드는 계속 쓸 수 있습니다."
+  "craftadvisor.ai.unsupported": "이 모델은 도구 호출이나 JSON 답을 지원하지 않습니다 (%s). 재료 계산과 클립보드는 계속 쓸 수 있습니다.",
+  "craftadvisor.list.searching_more": "이름이 정확하지 않아 AI가 JEI에서 뜻에 맞는 아이템을 찾고 있어요: %s"
 }
