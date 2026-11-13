@@ -10,12 +10,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import com.google.gson.Gson;
 import com.kuh.craftadvisor.ClientConfig;
 import com.kuh.craftadvisor.ai.AiException;
 import com.kuh.craftadvisor.ai.AiProvider;
 import com.kuh.craftadvisor.ai.ClaudeProvider;
 import com.kuh.craftadvisor.ai.ItemPick;
+import com.kuh.craftadvisor.ai.OutgoingRequest;
 import com.kuh.craftadvisor.chat.ChatOut;
 import com.kuh.craftadvisor.clipboard.MaterialOutput;
 import com.kuh.craftadvisor.jei.CraftAdvisorJeiPlugin;
@@ -30,6 +30,7 @@ import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -40,10 +41,12 @@ final class AdvisorFlow {
     private static final int TARGET_AMOUNT = 1;
     private static final int MAX_HISTORY_TURNS = 12;
     private static final int INVENTORY_SUMMARY_ITEMS = 40;
-    private static final int PLAN_STEPS_FOR_AI = 30;
-    private static final Gson GSON = new Gson();
+    private static final int PREVIEW_LINES = 3;
+    private static final int PREVIEW_LINE_CHARS = 120;
     /** Recent free-question turns; only touched on the client thread. */
     private static final Deque<AiProvider.Turn> HISTORY = new ArrayDeque<>();
+    /** The one AI step held until /ai consent; only touched on the client thread. */
+    private static Runnable pendingAfterConsent;
 
     private AdvisorFlow() {
     }
@@ -64,13 +67,54 @@ final class AdvisorFlow {
             ChatOut.error("craftadvisor.msg.need_key", query);
             return;
         }
+        if (!consented(() -> start(query))) {
+            return;
+        }
         ChatOut.info("craftadvisor.msg.searching", query);
         if (found.candidates().isEmpty()) {
             askFreeQuestion(ai.get(), query);
             return;
         }
-        List<String> lines = found.candidates().stream().map(c -> c.key().id() + " | " + c.name()).toList();
-        onClientThread(ai.get().pickItem(query, lines), pick -> onPicked(runtime.get(), ai.get(), query, found, pick));
+        onClientThread(ai.get().pickItem(pickRequest(query, found)),
+                pick -> onPicked(runtime.get(), ai.get(), query, found, pick));
+    }
+
+    /** Follows the same path as {@link #start} up to the first AI request and shows it; sends and opens nothing. */
+    static void preview(String query) {
+        Optional<IJeiRuntime> runtime = CraftAdvisorJeiPlugin.runtime();
+        if (runtime.isEmpty()) {
+            ChatOut.error("craftadvisor.msg.jei_not_ready");
+            return;
+        }
+        ItemCandidates.Result found = ItemCandidates.find(runtime.get(), query, ClientConfig.MAX_CANDIDATES.get());
+        Optional<AiProvider> ai = provider();
+        if (found.exact().isPresent()) {
+            if (ai.isEmpty()) {
+                ChatOut.info("craftadvisor.preview.exact_only");
+                return;
+            }
+            CraftPlanner planner = new CraftPlanner(new JeiRecipeSource(runtime.get()));
+            CraftPlan plan = planner.plan(found.exact().get().key(), TARGET_AMOUNT, inventory());
+            showPreview(OutgoingRequest.advice(ClaudeProvider.HOST, query, plan, planner, sharing(), AdvisorFlow::name));
+            return;
+        }
+        if (ai.isEmpty()) {
+            ChatOut.error("craftadvisor.msg.need_key", query);
+            return;
+        }
+        showPreview(found.candidates().isEmpty() ? chatRequest(query) : pickRequest(query, found));
+    }
+
+    /** Saves consent for the current host and runs the held AI step, if any. */
+    static void consent() {
+        ClientConfig.CONSENTED_HOST.set(ClaudeProvider.HOST);
+        ClientConfig.CONSENTED_HOST.save();
+        ChatOut.info("craftadvisor.consent.saved", ClaudeProvider.HOST);
+        Runnable pending = pendingAfterConsent;
+        pendingAfterConsent = null;
+        if (pending != null) {
+            pending.run();
+        }
     }
 
     private static void onPicked(IJeiRuntime runtime, AiProvider ai, String query, ItemCandidates.Result found, ItemPick pick) {
@@ -91,7 +135,8 @@ final class AdvisorFlow {
             return;
         }
         Map<ItemKey, Integer> inventory = Items.countAll(minecraft.player.getInventory());
-        CraftPlan plan = new CraftPlanner(new JeiRecipeSource(runtime)).plan(target, TARGET_AMOUNT, inventory);
+        CraftPlanner planner = new CraftPlanner(new JeiRecipeSource(runtime));
+        CraftPlan plan = planner.plan(target, TARGET_AMOUNT, inventory);
 
         runtime.getRecipesGui().show(runtime.getJeiHelpers().getFocusFactory()
                 .createFocus(RecipeIngredientRole.OUTPUT, VanillaTypes.ITEM_STACK, stack));
@@ -101,14 +146,22 @@ final class AdvisorFlow {
             ChatOut.info("craftadvisor.msg.advice_needs_key");
             return;
         }
+        OutgoingRequest request = OutgoingRequest.advice(ClaudeProvider.HOST, query, plan, planner, sharing(),
+                AdvisorFlow::name);
+        if (!consented(() -> advise(ai.get(), request))) {
+            return;
+        }
+        advise(ai.get(), request);
+    }
+
+    private static void advise(AiProvider ai, OutgoingRequest request) {
         ChatOut.info("craftadvisor.msg.thinking");
-        onClientThread(ai.get().advise(query, planJson(plan)), ChatOut::advice);
+        onClientThread(ai.answer(request), ChatOut::advice);
     }
 
     private static void askFreeQuestion(AiProvider ai, String question) {
         ChatOut.info("craftadvisor.msg.thinking");
-        List<AiProvider.Turn> history = List.copyOf(HISTORY);
-        onClientThread(ai.chat(history, question, inventorySummary()), answer -> {
+        onClientThread(ai.answer(chatRequest(question)), answer -> {
             remember(new AiProvider.Turn(true, question));
             remember(new AiProvider.Turn(false, answer));
             ChatOut.advice(answer);
@@ -119,6 +172,55 @@ final class AdvisorFlow {
         HISTORY.addLast(turn);
         while (HISTORY.size() > MAX_HISTORY_TURNS) {
             HISTORY.removeFirst();
+        }
+    }
+
+    private static OutgoingRequest pickRequest(String query, ItemCandidates.Result found) {
+        List<String> lines = found.candidates().stream().map(c -> c.key().id() + " | " + c.name()).toList();
+        return OutgoingRequest.pick(ClaudeProvider.HOST, query, lines);
+    }
+
+    private static OutgoingRequest chatRequest(String question) {
+        return OutgoingRequest.chat(ClaudeProvider.HOST, question, List.copyOf(HISTORY), inventorySummary(), sharing());
+    }
+
+    private static OutgoingRequest.Sharing sharing() {
+        return new OutgoingRequest.Sharing(ClientConfig.SHARE_INVENTORY.get(), ClientConfig.SHARE_HISTORY.get());
+    }
+
+    /** True when the player agreed to send to the current host; otherwise holds {@code pending} and explains. */
+    private static boolean consented(Runnable pending) {
+        if (ClaudeProvider.HOST.equals(ClientConfig.CONSENTED_HOST.get())) {
+            return true;
+        }
+        pendingAfterConsent = pending;
+        ChatOut.info("craftadvisor.consent.header", ClaudeProvider.HOST);
+        ChatOut.info("craftadvisor.consent.sends");
+        if (ClientConfig.SHARE_INVENTORY.get()) {
+            ChatOut.info("craftadvisor.consent.sends_inventory");
+        }
+        if (ClientConfig.SHARE_HISTORY.get()) {
+            ChatOut.info("craftadvisor.consent.sends_history");
+        }
+        ChatOut.info("craftadvisor.consent.not_sent");
+        ChatOut.info("craftadvisor.consent.config");
+        ChatOut.info("craftadvisor.consent.how");
+        return false;
+    }
+
+    private static void showPreview(OutgoingRequest request) {
+        String route = request.route().name().toLowerCase(java.util.Locale.ROOT);
+        ChatOut.info("craftadvisor.preview.header", Component.translatable("craftadvisor.preview.route." + route));
+        ChatOut.info("craftadvisor.preview.target", request.host(), ClientConfig.MODEL.get());
+        if (request.route() == OutgoingRequest.Route.CHAT) {
+            int chars = request.history().stream().mapToInt(turn -> turn.text().length()).sum();
+            ChatOut.info("craftadvisor.preview.history", request.history().size(), chars);
+        }
+        for (OutgoingRequest.Section section : request.sections()) {
+            ChatOut.info("craftadvisor.preview.section", section.name(), section.text().length());
+            for (String line : section.head(PREVIEW_LINES, PREVIEW_LINE_CHARS)) {
+                ChatOut.info("craftadvisor.preview.line", line);
+            }
         }
     }
 
@@ -146,22 +248,13 @@ final class AdvisorFlow {
         ChatOut.error(key, error.getMessage());
     }
 
-    private static String planJson(CraftPlan plan) {
-        Map<String, Object> json = Map.of(
-                "target", name(plan.target()),
-                "machines", plan.machines().stream().map(AdvisorFlow::name).toList(),
-                "toCraft", plan.steps().stream().limit(PLAN_STEPS_FOR_AI)
-                        .map(s -> Map.of("item", name(s.item()), "crafts", s.crafts(), "depth", s.depth()))
-                        .toList(),
-                "missing", plan.missing().stream()
-                        .map(m -> Map.of("item", name(m.item()), "count", m.count(),
-                                "reason", m.reason().name().toLowerCase(java.util.Locale.ROOT)))
-                        .toList());
-        return GSON.toJson(json);
-    }
-
     private static String name(ItemKey key) {
         return Items.nameOf(key).getString() + " (" + key.id() + ")";
+    }
+
+    private static Map<ItemKey, Integer> inventory() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft.player == null ? Map.of() : Items.countAll(minecraft.player.getInventory());
     }
 
     private static String inventorySummary() {
