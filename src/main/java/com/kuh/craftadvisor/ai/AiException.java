@@ -2,7 +2,8 @@ package com.kuh.craftadvisor.ai;
 
 /** A failed AI call, classified so the chat can show a helpful message. Never contains the API key. */
 public final class AiException extends RuntimeException {
-    public enum Kind { NO_KEY, BAD_KEY, RATE_LIMITED, OVERLOADED, REFUSED, BAD_REQUEST, NETWORK, BAD_RESPONSE }
+    /** {@code UNSUPPORTED}: the model rejected tools or a response schema (HTTP 400 on such a request). */
+    public enum Kind { NO_KEY, BAD_KEY, RATE_LIMITED, OVERLOADED, REFUSED, BAD_REQUEST, NETWORK, BAD_RESPONSE, UNSUPPORTED }
 
     private final Kind kind;
 

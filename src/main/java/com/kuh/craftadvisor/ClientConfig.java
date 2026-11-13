@@ -1,5 +1,7 @@
 package com.kuh.craftadvisor;
 
+import com.kuh.craftadvisor.ai.ProviderSettings;
+
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 // Stored in <game dir>/config/craftadvisor-client.toml, never in the repository.
@@ -7,12 +9,25 @@ public final class ClientConfig {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
     public static final ModConfigSpec.ConfigValue<String> API_KEY = BUILDER
-            .comment("Anthropic API key used for /ai. Leave empty to use only exact item names without AI.")
+            .comment("API key of the AI provider used for /ai. Leave empty to use only exact item names without AI"
+                    + " (ollama needs no key).")
             .define("apiKey", "");
 
     public static final ModConfigSpec.ConfigValue<String> MODEL = BUILDER
-            .comment("Claude model id.")
-            .define("model", "claude-opus-5-5");
+            .comment("Model id. The default is a Claude model; set your model's name for openai or ollama.")
+            .define("model", ProviderSettings.DEFAULT_MODEL);
+
+    public static final ModConfigSpec.ConfigValue<String> PROVIDER = BUILDER
+            .comment("AI provider: anthropic, openai (or any OpenAI-compatible server), ollama, or offline"
+                    + " (no AI and no network; exact item names only).")
+            .define("provider", "anthropic",
+                    value -> value instanceof String text && ProviderSettings.Kind.parse(text).isPresent());
+
+    public static final ModConfigSpec.ConfigValue<String> BASE_URL = BUILDER
+            .comment("API address. Empty uses the provider's default (anthropic https://api.anthropic.com/v1,"
+                    + " openai https://api.openai.com/v1, ollama http://localhost:11434/v1). Must start with https://;"
+                    + " http:// is allowed only for localhost, 127.0.0.1 and ::1.")
+            .define("baseUrl", "");
 
     public static final ModConfigSpec.IntValue MAX_CANDIDATES = BUILDER
             .comment("How many JEI items are offered to the AI when it picks the target item.")

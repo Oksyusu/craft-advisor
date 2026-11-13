@@ -1,17 +1,12 @@
 package com.kuh.craftadvisor.ai;
 
-import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -23,40 +18,37 @@ import com.kuh.craftadvisor.CraftAdvisor;
 
 /**
  * Claude Messages API over the JDK HttpClient (no extra libraries in the mod jar).
- * One shared HTTP/2 client keeps the connection warm; calls run on a single daemon thread.
+ * The client, the AI thread and retries are shared with other providers ({@link AiHttp}).
  */
 public final class ClaudeProvider implements AiProvider {
-    private static final URI ENDPOINT = URI.create("https://api.anthropic.com/v1/messages");
-    /** Where requests go; shown in the consent notice and the preview. */
-    public static final String HOST = ENDPOINT.getHost();
+    private static final URI DEFAULT_BASE = URI.create(ProviderSettings.Kind.ANTHROPIC.defaultBaseUrl());
+    private static final String LABEL = "Claude";
     private static final String API_VERSION = "2026-10-21";
     private static final String FALLBACK_BETA = "server-side-fallback-2026-07-01";
     /** Models documented to accept server-side refusal fallbacks. */
     private static final Set<String> FALLBACK_MODELS = Set.of(
             "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5-2");
     private static final int PICK_MAX_TOKENS = 1024;
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(90);
-    private static final long RETRY_DELAY_MS = 1500;
-
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_2)
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
-    private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(r -> {
-        Thread thread = new Thread(r, "craftadvisor-ai");
-        thread.setDaemon(true);
-        return thread;
-    });
     private static final Gson GSON = new Gson();
 
+    private final URI endpoint;
     private final String apiKey;
     private final String model;
     private final int answerMaxTokens;
+    private final AiHttp.Transport transport;
 
+    /** The default Anthropic address. */
     public ClaudeProvider(String apiKey, String model, int answerMaxTokens) {
+        this(DEFAULT_BASE, apiKey, model, answerMaxTokens, AiHttp.JDK);
+    }
+
+    /** {@code baseUri} is an allowed base URL ({@link ProviderSettings#checkBaseUrl}) such as {@code https://api.anthropic.com/v1}. */
+    ClaudeProvider(URI baseUri, String apiKey, String model, int answerMaxTokens, AiHttp.Transport transport) {
+        this.endpoint = URI.create(baseUri + "/messages");
         this.apiKey = apiKey;
         this.model = model;
         this.answerMaxTokens = answerMaxTokens;
+        this.transport = transport;
     }
 
     @Override
@@ -234,67 +226,18 @@ public final class ClaudeProvider implements AiProvider {
         if (apiKey == null || apiKey.isBlank()) {
             return CompletableFuture.failedFuture(new AiException(AiException.Kind.NO_KEY, "no API key"));
         }
-        return CompletableFuture.supplyAsync(() -> sendWithRetry(json), EXECUTOR);
+        return AiHttp.post(transport, new AiHttp.Call(LABEL, endpoint, headers(), json, apiKey, false));
     }
 
-    private String sendWithRetry(String json) {
-        try {
-            return sendOnce(json);
-        } catch (AiException e) {
-            boolean retryable = e.kind() == AiException.Kind.RATE_LIMITED
-                    || e.kind() == AiException.Kind.OVERLOADED
-                    || e.kind() == AiException.Kind.NETWORK;
-            if (!retryable) {
-                throw e;
-            }
-            sleep(RETRY_DELAY_MS);
-            return sendOnce(json);
-        }
-    }
-
-    private String sendOnce(String json) {
-        HttpRequest.Builder request = HttpRequest.newBuilder(ENDPOINT)
-                .timeout(REQUEST_TIMEOUT)
-                .header("content-type", "application/json")
-                .header("x-api-key", apiKey)
-                .header("anthropic-version", API_VERSION)
-                .POST(HttpRequest.BodyPublishers.ofString(json));
+    private Map<String, String> headers() {
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("content-type", "application/json");
+        headers.put("x-api-key", apiKey);
+        headers.put("anthropic-version", API_VERSION);
         if (FALLBACK_MODELS.contains(model)) {
-            request.header("anthropic-beta", FALLBACK_BETA);
+            headers.put("anthropic-beta", FALLBACK_BETA);
         }
-        HttpResponse<String> response;
-        try {
-            response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
-        } catch (IOException e) {
-            throw new AiException(AiException.Kind.NETWORK, e.getClass().getSimpleName(), e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AiException(AiException.Kind.NETWORK, "interrupted", e);
-        }
-        if (response.statusCode() != 200) {
-            throw httpError(response.statusCode(), response.body());
-        }
-        return response.body();
-    }
-
-    private static AiException httpError(int status, String body) {
-        String type = "";
-        String message = "HTTP " + status;
-        try {
-            JsonObject error = JsonParser.parseString(body).getAsJsonObject().getAsJsonObject("error");
-            type = error.get("type").getAsString();
-            message = error.get("message").getAsString();
-        } catch (RuntimeException ignored) {
-            // body was not the documented error envelope; keep the status code only
-        }
-        CraftAdvisor.LOGGER.warn("Claude API error: status={} type={}", status, type);
-        AiException.Kind kind = switch (status) {
-            case 401, 403 -> AiException.Kind.BAD_KEY;
-            case 429 -> AiException.Kind.RATE_LIMITED;
-            case 500, 502, 503, 504, 529 -> AiException.Kind.OVERLOADED;
-            default -> AiException.Kind.BAD_REQUEST;
-        };
-        return new AiException(kind, message);
+        return headers;
     }
 
     /** Joins the text blocks; thinking and fallback blocks are skipped. */
@@ -353,13 +296,5 @@ public final class ClaudeProvider implements AiProvider {
             }
         }
         return text.toString();
-    }
-
-    private static void sleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 }

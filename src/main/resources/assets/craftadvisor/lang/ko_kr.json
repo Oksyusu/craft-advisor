@@ -2,8 +2,8 @@
   "craftadvisor.configuration.title": "Craft Advisor",
   "craftadvisor.configuration.section.craftadvisor.client.toml": "Craft Advisor",
   "craftadvisor.configuration.section.craftadvisor.client.toml.title": "Craft Advisor",
-  "craftadvisor.configuration.apiKey": "Anthropic API 키",
-  "craftadvisor.configuration.model": "Claude 모델",
+  "craftadvisor.configuration.apiKey": "API 키",
+  "craftadvisor.configuration.model": "AI 모델",
   "craftadvisor.configuration.maxCandidates": "AI에 보낼 아이템 후보 수",
   "craftadvisor.configuration.adviceMaxTokens": "조언 최대 토큰",
   "craftadvisor.configuration.maxToolCalls": "질문 하나당 AI 조회 횟수",
@@ -12,7 +12,7 @@
   "craftadvisor.msg.need_key": "\"%s\"와 정확히 일치하는 아이템이 없습니다. 정확한 이름이나 ID(예: minecraft:piston)를 쓰거나, 모드 > Craft Advisor > 설정에서 API 키를 넣으면 자연어로 물을 수 있습니다.",
   "craftadvisor.msg.unknown_item": "알 수 없는 아이템: %s",
   "craftadvisor.msg.searching": "찾는 중: %s",
-  "craftadvisor.msg.thinking": "Claude에게 묻는 중…",
+  "craftadvisor.msg.thinking": "AI에게 묻는 중…",
   "craftadvisor.msg.advice_needs_key": "AI 조언을 받으려면 모드 > Craft Advisor > 설정에서 API 키를 넣으세요.",
   "craftadvisor.msg.target": "목표: %s",
   "craftadvisor.msg.machines": "필요한 기계: %s",
@@ -29,11 +29,11 @@
   "craftadvisor.ai.no_key": "API 키가 설정되지 않았습니다.",
   "craftadvisor.ai.bad_key": "API 키가 거부되었습니다. 모드 > Craft Advisor > 설정에서 확인하세요.",
   "craftadvisor.ai.rate_limited": "요청이 너무 많습니다. 잠시 후 다시 시도하세요.",
-  "craftadvisor.ai.overloaded": "Claude가 지금 바쁩니다. 조금 뒤에 다시 시도하세요.",
-  "craftadvisor.ai.refused": "Claude가 이 요청에 답하지 않았습니다.",
+  "craftadvisor.ai.overloaded": "AI 서버가 지금 바쁩니다. 조금 뒤에 다시 시도하세요.",
+  "craftadvisor.ai.refused": "AI가 이 요청에 답하지 않았습니다.",
   "craftadvisor.ai.bad_request": "요청이 거부되었습니다: %s",
-  "craftadvisor.ai.network": "Claude API에 연결하지 못했습니다 (%s).",
-  "craftadvisor.ai.bad_response": "Claude의 답을 읽지 못했습니다 (%s).",
+  "craftadvisor.ai.network": "AI API에 연결하지 못했습니다 (%s).",
+  "craftadvisor.ai.bad_response": "AI의 답을 읽지 못했습니다 (%s).",
 
   "craftadvisor.msg.missing_line_fluid": " - %s %s mB%s",
   "craftadvisor.msg.choices_header": "고른 대안:",
@@ -81,5 +81,15 @@
 
   "craftadvisor.msg.show_hover": "클릭: 레시피 보기",
   "craftadvisor.msg.no_jei_recipe": "JEI에 %s 레시피가 없습니다.",
-  "craftadvisor.help.show": "/ai show <아이템 ID>: 아이템의 JEI 레시피 화면을 엽니다 (채팅 링크가 씀)"
+  "craftadvisor.help.show": "/ai show <아이템 ID>: 아이템의 JEI 레시피 화면을 엽니다 (채팅 링크가 씀)",
+
+  "craftadvisor.configuration.provider": "AI 제공자",
+  "craftadvisor.configuration.baseUrl": "API 주소 (baseUrl)",
+  "craftadvisor.offline.no_free_question": "오프라인 모드에서는 자유 질문을 쓸 수 없어요. 정확한 아이템 이름이나 ID(예: create:mechanical_piston)를 쓰세요.",
+  "craftadvisor.offline.similar": "\"%s\"와 정확히 일치하는 아이템이 없습니다. 비슷한 아이템(클릭하면 레시피):",
+  "craftadvisor.offline.similar_line": " - %s",
+  "craftadvisor.provider.offline": "오프라인 모드: AI 조언 없이 재료, JEI 레시피, 클립보드만 동작합니다.",
+  "craftadvisor.provider.bad_base_url": "baseUrl 설정을 쓸 수 없어 아무것도 보내지 않았습니다. https://로 시작해야 하고, http://는 localhost·127.0.0.1·::1만 됩니다. config/craftadvisor-client.toml에서 고치세요.",
+  "craftadvisor.provider.no_model": "모델 이름을 설정하세요: config/craftadvisor-client.toml의 \"model\"에 쓸 모델 이름을 넣으세요.",
+  "craftadvisor.ai.unsupported": "이 모델은 도구 호출이나 JSON 답을 지원하지 않습니다 (%s). 재료 계산과 클립보드는 계속 쓸 수 있습니다."
 }

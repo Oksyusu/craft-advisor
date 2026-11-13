@@ -2,8 +2,8 @@
   "craftadvisor.configuration.title": "Craft Advisor",
   "craftadvisor.configuration.section.craftadvisor.client.toml": "Craft Advisor",
   "craftadvisor.configuration.section.craftadvisor.client.toml.title": "Craft Advisor",
-  "craftadvisor.configuration.apiKey": "Anthropic API Key",
-  "craftadvisor.configuration.model": "Claude Model",
+  "craftadvisor.configuration.apiKey": "API Key",
+  "craftadvisor.configuration.model": "AI Model",
   "craftadvisor.configuration.maxCandidates": "Item Candidates for AI",
   "craftadvisor.configuration.adviceMaxTokens": "Advice Max Tokens",
   "craftadvisor.configuration.maxToolCalls": "AI Lookups per Question",
@@ -12,7 +12,7 @@
   "craftadvisor.msg.need_key": "No item is named exactly \"%s\". Use an exact name or id (e.g. minecraft:piston), or set an API key in Mods > Craft Advisor > Config for natural language.",
   "craftadvisor.msg.unknown_item": "Unknown item: %s",
   "craftadvisor.msg.searching": "Looking up: %s",
-  "craftadvisor.msg.thinking": "Asking Claude...",
+  "craftadvisor.msg.thinking": "Asking the AI...",
   "craftadvisor.msg.advice_needs_key": "Set an API key in Mods > Craft Advisor > Config to get AI advice.",
   "craftadvisor.msg.target": "Target: %s",
   "craftadvisor.msg.machines": "Machines: %s",
@@ -29,11 +29,11 @@
   "craftadvisor.ai.no_key": "No API key is set.",
   "craftadvisor.ai.bad_key": "The API key was rejected. Check it in Mods > Craft Advisor > Config.",
   "craftadvisor.ai.rate_limited": "Too many requests. Wait a moment and try again.",
-  "craftadvisor.ai.overloaded": "Claude is busy right now. Try again shortly.",
-  "craftadvisor.ai.refused": "Claude declined to answer this request.",
+  "craftadvisor.ai.overloaded": "The AI service is busy right now. Try again shortly.",
+  "craftadvisor.ai.refused": "The AI declined to answer this request.",
   "craftadvisor.ai.bad_request": "The request was rejected: %s",
-  "craftadvisor.ai.network": "Could not reach the Claude API (%s).",
-  "craftadvisor.ai.bad_response": "Claude's answer could not be read (%s).",
+  "craftadvisor.ai.network": "Could not reach the AI API (%s).",
+  "craftadvisor.ai.bad_response": "The AI's answer could not be read (%s).",
 
   "craftadvisor.msg.missing_line_fluid": " - %s %s mB%s",
   "craftadvisor.msg.choices_header": "Chosen alternatives:",
@@ -81,5 +81,15 @@
 
   "craftadvisor.msg.show_hover": "Click: show recipes",
   "craftadvisor.msg.no_jei_recipe": "JEI has no recipes for %s.",
-  "craftadvisor.help.show": "/ai show <item id>: open the JEI recipes of an item (used by the chat links)"
+  "craftadvisor.help.show": "/ai show <item id>: open the JEI recipes of an item (used by the chat links)",
+
+  "craftadvisor.configuration.provider": "AI Provider",
+  "craftadvisor.configuration.baseUrl": "API Address (baseUrl)",
+  "craftadvisor.offline.no_free_question": "Free questions are not available in offline mode. Use an exact item name or id (e.g. create:mechanical_piston).",
+  "craftadvisor.offline.similar": "No item is named exactly \"%s\". Similar items (click to show recipes):",
+  "craftadvisor.offline.similar_line": " - %s",
+  "craftadvisor.provider.offline": "Offline mode: no AI advice. Materials, the JEI recipe and the clipboard still work.",
+  "craftadvisor.provider.bad_base_url": "baseUrl is not allowed and nothing was sent: it must start with https:// (http:// only for localhost, 127.0.0.1 or ::1). Fix it in config/craftadvisor-client.toml.",
+  "craftadvisor.provider.no_model": "Set the model name: put your model in \"model\" in config/craftadvisor-client.toml.",
+  "craftadvisor.ai.unsupported": "This model does not support tool calls or JSON answers (%s). Materials and the clipboard still work."
 }
