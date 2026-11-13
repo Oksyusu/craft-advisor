@@ -32,5 +32,8 @@
   "craftadvisor.ai.refused": "Claude declined to answer this request.",
   "craftadvisor.ai.bad_request": "The request was rejected: %s",
   "craftadvisor.ai.network": "Could not reach the Claude API (%s).",
-  "craftadvisor.ai.bad_response": "Claude's answer could not be read (%s)."
+  "craftadvisor.ai.bad_response": "Claude's answer could not be read (%s).",
+
+  "craftadvisor.msg.show_hover": "Click: show recipes",
+  "craftadvisor.msg.no_jei_recipe": "JEI has no recipes for %s."
 }

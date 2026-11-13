@@ -19,6 +19,14 @@ public final class AiCommand {
     @SubscribeEvent
     static void register(RegisterClientCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("ai")
+                .then(Commands.literal("show")
+                        .then(Commands.argument("id", StringArgumentType.greedyString())
+                                .executes(ctx -> {
+                                    String id = StringArgumentType.getString(ctx, "id");
+                                    // Chat links run this while the chat screen is open; open JEI on the next task.
+                                    Minecraft.getInstance().tell(() -> ShowRecipe.show(id));
+                                    return 1;
+                                })))
                 .then(Commands.argument("text", StringArgumentType.greedyString())
                         .executes(ctx -> {
                             String text = StringArgumentType.getString(ctx, "text");

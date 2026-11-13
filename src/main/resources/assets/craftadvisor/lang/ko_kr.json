@@ -32,5 +32,8 @@
   "craftadvisor.ai.refused": "Claude가 이 요청에 답하지 않았습니다.",
   "craftadvisor.ai.bad_request": "요청이 거부되었습니다: %s",
   "craftadvisor.ai.network": "Claude API에 연결하지 못했습니다 (%s).",
-  "craftadvisor.ai.bad_response": "Claude의 답을 읽지 못했습니다 (%s)."
+  "craftadvisor.ai.bad_response": "Claude의 답을 읽지 못했습니다 (%s).",
+
+  "craftadvisor.msg.show_hover": "클릭: 레시피 보기",
+  "craftadvisor.msg.no_jei_recipe": "JEI에 %s 레시피가 없습니다."
 }
