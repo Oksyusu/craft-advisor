@@ -24,6 +24,7 @@ public final class AiCommand {
                     ChatOut.info("craftadvisor.help.usage");
                     ChatOut.info("craftadvisor.help.preview");
                     ChatOut.info("craftadvisor.help.consent");
+                    ChatOut.info("craftadvisor.help.show");
                     return 1;
                 })
                 // Literals win over the free-text argument, so "/ai preview ..." is never sent as a question.
@@ -39,6 +40,19 @@ public final class AiCommand {
                             Minecraft.getInstance().tell(AdvisorFlow::consent);
                             return 1;
                         }))
+                .then(Commands.literal("show")
+                        // Without this, an incomplete "/ai show" would be passed on to the server.
+                        .executes(ctx -> {
+                            ChatOut.info("craftadvisor.help.show");
+                            return 1;
+                        })
+                        .then(Commands.argument("id", StringArgumentType.greedyString())
+                                .executes(ctx -> {
+                                    String id = StringArgumentType.getString(ctx, "id");
+                                    // Chat links run this while the chat screen is open; open JEI on the next task.
+                                    Minecraft.getInstance().tell(() -> ShowRecipe.show(id));
+                                    return 1;
+                                })))
                 .then(Commands.argument("text", StringArgumentType.greedyString())
                         .executes(ctx -> {
                             String text = StringArgumentType.getString(ctx, "text");

@@ -2,7 +2,6 @@ package com.kuh.craftadvisor.chat;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.stream.Collectors;
 
 import com.kuh.craftadvisor.RecipePreferencesFile;
 import com.kuh.craftadvisor.jei.Items;
@@ -12,7 +11,10 @@ import com.kuh.craftadvisor.planner.IngredientKey;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentUtils;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 
 /** Local chat output only; nothing here is sent to the server. Call on the client thread. */
@@ -39,7 +41,7 @@ public final class ChatOut {
     }
 
     public static void plan(CraftPlan plan) {
-        info("craftadvisor.msg.target", Items.nameOf(plan.target()));
+        info("craftadvisor.msg.target", link(plan.target()));
         if (!plan.machines().isEmpty()) {
             info("craftadvisor.msg.machines", joinNames(plan.machines()));
         }
@@ -51,7 +53,7 @@ public final class ChatOut {
         for (CraftPlan.Missing missing : plan.missing()) {
             String line = isFluid(missing.item()) ? "craftadvisor.msg.missing_line_fluid" : "craftadvisor.msg.missing_line";
             send(Component.translatable(line,
-                    Items.nameOf(missing.item()), missing.count(), reasonSuffix(missing.reason())));
+                    link(missing.item()), missing.count(), reasonSuffix(missing.reason())));
         }
         choices(plan.choices());
     }
@@ -96,8 +98,23 @@ public final class ChatOut {
         };
     }
 
-    private static String joinNames(List<IngredientKey> items) {
-        return items.stream().map(item -> Items.nameOf(item).getString()).collect(Collectors.joining(", "));
+    private static Component joinNames(List<IngredientKey> items) {
+        return ComponentUtils.formatList(items, Component.literal(", "), ChatOut::link);
+    }
+
+    /**
+     * Underlined item name that opens its JEI recipes via /ai show. Chat only, never the clipboard.
+     * Non-item ingredients (fluids, ...) stay plain text: /ai show can only open item recipes for now.
+     */
+    private static Component link(IngredientKey item) {
+        if (!item.isItem()) {
+            return Items.nameOf(item);
+        }
+        return Items.nameOf(item).copy().withStyle(style -> style
+                .withUnderlined(true)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/ai show " + item.uid()))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        Component.translatable("craftadvisor.msg.show_hover"))));
     }
 
     private static void send(Component message) {

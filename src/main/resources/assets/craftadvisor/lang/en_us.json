@@ -73,5 +73,9 @@
   "craftadvisor.preview.target": "To: %s, model %s",
   "craftadvisor.preview.history": "Earlier conversation: %s turns, %s chars",
   "craftadvisor.preview.section": "[%s] %s chars",
-  "craftadvisor.preview.line": "  %s"
+  "craftadvisor.preview.line": "  %s",
+
+  "craftadvisor.msg.show_hover": "Click: show recipes",
+  "craftadvisor.msg.no_jei_recipe": "JEI has no recipes for %s.",
+  "craftadvisor.help.show": "/ai show <item id>: open the JEI recipes of an item (used by the chat links)"
 }

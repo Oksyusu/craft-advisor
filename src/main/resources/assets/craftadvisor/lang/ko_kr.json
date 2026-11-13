@@ -73,5 +73,9 @@
   "craftadvisor.preview.target": "받는 곳: %s, 모델 %s",
   "craftadvisor.preview.history": "이전 대화: %s턴, %s자",
   "craftadvisor.preview.section": "[%s] %s자",
-  "craftadvisor.preview.line": "  %s"
+  "craftadvisor.preview.line": "  %s",
+
+  "craftadvisor.msg.show_hover": "클릭: 레시피 보기",
+  "craftadvisor.msg.no_jei_recipe": "JEI에 %s 레시피가 없습니다.",
+  "craftadvisor.help.show": "/ai show <아이템 ID>: 아이템의 JEI 레시피 화면을 엽니다 (채팅 링크가 씀)"
 }
