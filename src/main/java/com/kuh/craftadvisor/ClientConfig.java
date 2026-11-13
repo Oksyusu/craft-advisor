@@ -22,8 +22,13 @@ public final class ClientConfig {
             .comment("Maximum tokens for an advice or free-question answer.")
             .defineInRange("adviceMaxTokens", 2000, 256, 16000);
 
+    public static final ModConfigSpec.IntValue MAX_TOOL_CALLS = BUILDER
+            .comment("How many game-data lookups (tool calls) the AI may make for one free question.")
+            .defineInRange("maxToolCalls", 8, 1, 20);
+
     public static final ModConfigSpec.BooleanValue SHARE_INVENTORY = BUILDER
-            .comment("Send an inventory summary with free questions. When false, advice gets total amounts instead of what is missing.")
+            .comment("Let the AI look up your inventory in free questions. When false, that lookup is not offered, and"
+                    + " advice and the AI's missing-material lookups get total amounts instead of what is missing.")
             .define("shareInventory", true);
 
     public static final ModConfigSpec.BooleanValue SHARE_HISTORY = BUILDER

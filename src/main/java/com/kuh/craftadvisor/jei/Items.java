@@ -31,6 +31,8 @@ public final class Items {
     /** JEI stacks with any custom name removed: names shown and sent to the AI are default names. */
     private static final Map<IngredientKey, ItemStack> STACKS = new HashMap<>();
     private static final Map<IngredientKey, String> OTHER_NAMES = new HashMap<>();
+    /** Non-item ingredients as JEI gave them, so their recipes can be looked up. */
+    private static final Map<IngredientKey, ITypedIngredient<?>> OTHERS = new HashMap<>();
 
     private Items() {
     }
@@ -50,7 +52,13 @@ public final class Items {
         }
         IngredientKey key = uidKey(manager, ingredient.getType(), value);
         OTHER_NAMES.computeIfAbsent(key, k -> manager.getIngredientHelper(ingredient.getType()).getDisplayName(value));
+        OTHERS.putIfAbsent(key, ingredient);
         return key;
+    }
+
+    /** The JEI ingredient behind a non-item key seen through JEI. */
+    static Optional<ITypedIngredient<?>> typedOf(IngredientKey key) {
+        return Optional.ofNullable(OTHERS.get(key));
     }
 
     /**
@@ -113,6 +121,7 @@ public final class Items {
     static void forget() {
         STACKS.clear();
         OTHER_NAMES.clear();
+        OTHERS.clear();
     }
 
     /** Item counts across the whole player inventory (main, armor, offhand). Stacks are not remembered. */

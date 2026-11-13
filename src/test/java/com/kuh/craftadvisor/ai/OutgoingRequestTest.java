@@ -11,11 +11,13 @@ import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
 
+import com.google.gson.JsonParser;
 import com.kuh.craftadvisor.planner.CraftPlan;
 import com.kuh.craftadvisor.planner.CraftPlanner;
 import com.kuh.craftadvisor.planner.IngredientSlot;
 import com.kuh.craftadvisor.planner.IngredientKey;
 import com.kuh.craftadvisor.planner.RecipeOption;
+import com.kuh.craftadvisor.tools.AdvisorTools;
 
 class OutgoingRequestTest {
     private static final String HOST = "api.anthropic.com";
@@ -45,12 +47,26 @@ class OutgoingRequestTest {
     }
 
     @Test
-    void freeQuestionWithoutInventorySharingSendsNoInventorySummary() {
-        OutgoingRequest request = OutgoingRequest.chat(HOST, "what next?", List.of(),
-                "minecraft:diamond x7, minecraft:cobblestone x10", NO_INVENTORY);
+    void freeQuestionWithoutInventorySharingOffersNoInventoryTool() {
+        OutgoingRequest request = chat("what next?", List.of(), NO_INVENTORY);
 
-        assertNoInventory(request);
         assertTrue(request.userText().contains(OutgoingRequest.NOT_SHARED));
+        assertFalse(request.tools().stream().anyMatch(t -> t.name().equals(AdvisorTools.GET_INVENTORY)));
+        assertEquals(List.of(AdvisorTools.GET_INVENTORY), request.toolsOff());
+        String body = new ClaudeProvider("key", "claude-opus-5-5", 2000).body(request);
+        List<String> sentTools = JsonParser.parseString(body).getAsJsonObject().getAsJsonArray("tools").asList().stream()
+                .map(tool -> tool.getAsJsonObject().get("name").getAsString()).toList();
+        assertEquals(request.tools().stream().map(ToolSpec::name).toList(), sentTools);
+        assertFalse(sentTools.contains(AdvisorTools.GET_INVENTORY));
+    }
+
+    @Test
+    void freeQuestionWithInventorySharingOffersAllFourTools() {
+        OutgoingRequest request = chat("what next?", List.of(), NO_HISTORY);
+
+        assertEquals(List.of(AdvisorTools.SEARCH_ITEMS, AdvisorTools.GET_RECIPES, AdvisorTools.GET_INVENTORY,
+                AdvisorTools.COMPUTE_MISSING), request.tools().stream().map(ToolSpec::name).toList());
+        assertTrue(request.toolsOff().isEmpty());
     }
 
     @Test
@@ -58,7 +74,7 @@ class OutgoingRequestTest {
         List<AiProvider.Turn> history = List.of(
                 new AiProvider.Turn(true, "earlier question"), new AiProvider.Turn(false, "earlier answer"));
 
-        OutgoingRequest request = OutgoingRequest.chat(HOST, "what next?", history, "", NO_HISTORY);
+        OutgoingRequest request = chat("what next?", history, NO_HISTORY);
 
         assertTrue(request.history().isEmpty());
         String body = new ClaudeProvider("key", "claude-opus-5-5", 2000).body(request);
@@ -74,11 +90,15 @@ class OutgoingRequestTest {
         List<OutgoingRequest> requests = List.of(
                 OutgoingRequest.pick(HOST, "piston", List.of("minecraft:piston | Piston")),
                 OutgoingRequest.advice(HOST, "piston", plan, PLANNER, NO_HISTORY, NAMES),
-                OutgoingRequest.chat(HOST, "what next?", List.of(new AiProvider.Turn(true, "hi")), "", NO_HISTORY));
+                chat("what next?", List.of(new AiProvider.Turn(true, "hi")), NO_HISTORY));
 
         for (OutgoingRequest request : requests) {
             assertFalse(provider.body(request).contains(fakeKey), request.route().name());
         }
+    }
+
+    private static OutgoingRequest chat(String question, List<AiProvider.Turn> history, OutgoingRequest.Sharing sharing) {
+        return OutgoingRequest.chat(HOST, question, history, sharing, AdvisorTools.offered(sharing), AdvisorTools.off(sharing));
     }
 
     private static void assertNoInventory(OutgoingRequest request) {

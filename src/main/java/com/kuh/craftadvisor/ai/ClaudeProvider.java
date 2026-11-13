@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -74,7 +75,30 @@ public final class ClaudeProvider implements AiProvider {
         return send(request);
     }
 
-    /** The JSON body for {@code request}; the API key goes only in a header, never here. */
+    @Override
+    public CompletableFuture<AgentReply> converse(List<AgentMessage> messages, List<ToolSpec> tools, boolean toolsEnabled) {
+        return post(GSON.toJson(converseBody(messages, tools, toolsEnabled))).thenApply(body -> {
+            logUsage(body);
+            return replyOf(body);
+        });
+    }
+
+    /** Token usage only (shows whether the cache hits); never the request or response text. */
+    private static void logUsage(String body) {
+        if (!CraftAdvisor.LOGGER.isDebugEnabled()) {
+            return;
+        }
+        try {
+            JsonObject usage = JsonParser.parseString(body).getAsJsonObject().getAsJsonObject("usage");
+            CraftAdvisor.LOGGER.debug("Claude usage: input={} cache_read={} cache_write={} output={}",
+                    usage.get("input_tokens"), usage.get("cache_read_input_tokens"),
+                    usage.get("cache_creation_input_tokens"), usage.get("output_tokens"));
+        } catch (RuntimeException e) {
+            CraftAdvisor.LOGGER.debug("Claude response had no readable usage");
+        }
+    }
+
+    /** The JSON body for {@code request} (for a free question, the tool loop's first request); never the API key. */
     String body(OutgoingRequest request) {
         JsonArray messages = messages(request.history(), request.userText());
         JsonObject body = switch (request.route()) {
@@ -84,9 +108,68 @@ public final class ClaudeProvider implements AiProvider {
                 yield pick;
             }
             case ADVICE -> baseBody(Prompts.ADVICE, answerMaxTokens, "medium", messages);
-            case CHAT -> baseBody(Prompts.CHAT, answerMaxTokens, "medium", messages);
+            case CHAT -> converseBody(ToolLoop.firstMessages(request), request.tools(), true);
         };
         return GSON.toJson(body);
+    }
+
+    /**
+     * Tools come first and keep the same list for the whole loop, so the cached prefix (tools, then the system
+     * prompt) stays valid; the last tool and the system prompt carry the cache breakpoints.
+     */
+    JsonObject converseBody(List<AgentMessage> messages, List<ToolSpec> tools, boolean toolsEnabled) {
+        JsonArray array = new JsonArray();
+        messages.forEach(message -> array.add(messageJson(message)));
+        JsonObject body = baseBody(Prompts.CHAT, answerMaxTokens, "medium", array);
+        if (tools.isEmpty()) {
+            return body;
+        }
+        JsonArray toolArray = new JsonArray();
+        for (ToolSpec tool : tools) {
+            JsonObject json = new JsonObject();
+            json.addProperty("name", tool.name());
+            json.addProperty("description", tool.description());
+            json.add("input_schema", tool.inputSchema());
+            toolArray.add(json);
+        }
+        toolArray.get(toolArray.size() - 1).getAsJsonObject().add("cache_control", ephemeral());
+        body.add("tools", toolArray);
+        JsonObject choice = new JsonObject();
+        choice.addProperty("type", toolsEnabled ? "auto" : "none");
+        body.add("tool_choice", choice);
+        return body;
+    }
+
+    private static JsonObject messageJson(AgentMessage message) {
+        return switch (message) {
+            case AgentMessage.User user -> message("user", user.text());
+            case AgentMessage.Assistant assistant when assistant.providerRaw() != null -> {
+                JsonObject json = new JsonObject();
+                json.addProperty("role", "assistant");
+                json.add("content", assistant.providerRaw()); // thinking and tool_use blocks, unchanged
+                yield json;
+            }
+            case AgentMessage.Assistant assistant -> message("assistant", assistant.text());
+            case AgentMessage.ToolResults results -> toolResultsJson(results.results());
+        };
+    }
+
+    private static JsonObject toolResultsJson(List<ToolResult> results) {
+        JsonArray content = new JsonArray();
+        for (ToolResult result : results) {
+            JsonObject block = new JsonObject();
+            block.addProperty("type", "tool_result");
+            block.addProperty("tool_use_id", result.callId());
+            block.addProperty("content", result.content());
+            if (result.isError()) {
+                block.addProperty("is_error", true);
+            }
+            content.add(block);
+        }
+        JsonObject json = new JsonObject();
+        json.addProperty("role", "user");
+        json.add("content", content);
+        return json;
     }
 
     private JsonObject baseBody(String system, int maxTokens, String effort, JsonArray messages) {
@@ -96,9 +179,7 @@ public final class ClaudeProvider implements AiProvider {
         JsonObject systemBlock = new JsonObject();
         systemBlock.addProperty("type", "text");
         systemBlock.addProperty("text", system);
-        JsonObject cache = new JsonObject();
-        cache.addProperty("type", "ephemeral");
-        systemBlock.add("cache_control", cache);
+        systemBlock.add("cache_control", ephemeral());
         JsonArray systemArray = new JsonArray();
         systemArray.add(systemBlock);
         body.add("system", systemArray);
@@ -110,6 +191,12 @@ public final class ClaudeProvider implements AiProvider {
             body.addProperty("fallbacks", "default");
         }
         return body;
+    }
+
+    private static JsonObject ephemeral() {
+        JsonObject cache = new JsonObject();
+        cache.addProperty("type", "ephemeral");
+        return cache;
     }
 
     private static JsonArray messages(List<Turn> history, String user) {
@@ -139,10 +226,14 @@ public final class ClaudeProvider implements AiProvider {
     }
 
     private CompletableFuture<String> send(OutgoingRequest request) {
+        return post(body(request)).thenApply(ClaudeProvider::textOf);
+    }
+
+    /** The raw response body. */
+    private CompletableFuture<String> post(String json) {
         if (apiKey == null || apiKey.isBlank()) {
             return CompletableFuture.failedFuture(new AiException(AiException.Kind.NO_KEY, "no API key"));
         }
-        String json = body(request);
         return CompletableFuture.supplyAsync(() -> sendWithRetry(json), EXECUTOR);
     }
 
@@ -183,7 +274,7 @@ public final class ClaudeProvider implements AiProvider {
         if (response.statusCode() != 200) {
             throw httpError(response.statusCode(), response.body());
         }
-        return textOf(response.body());
+        return response.body();
     }
 
     private static AiException httpError(int status, String body) {
@@ -208,6 +299,35 @@ public final class ClaudeProvider implements AiProvider {
 
     /** Joins the text blocks; thinking and fallback blocks are skipped. */
     private static String textOf(String body) {
+        String text = joinText(parse(body).getAsJsonArray("content"));
+        if (text.isEmpty()) {
+            throw new AiException(AiException.Kind.BAD_RESPONSE, "no text in response");
+        }
+        return text;
+    }
+
+    /** Text and tool_use blocks of a tool-loop response; the whole content array is kept to be sent back. */
+    static AgentReply replyOf(String body) {
+        JsonObject response = parse(body);
+        JsonElement stop = response.get("stop_reason");
+        if (stop != null && "max_tokens".equals(stop.getAsString())) {
+            throw new AiException(AiException.Kind.BAD_RESPONSE, "answer was cut off at max_tokens");
+        }
+        JsonArray content = response.getAsJsonArray("content");
+        List<ToolCall> calls = new ArrayList<>();
+        for (JsonElement block : content) {
+            JsonObject object = block.getAsJsonObject();
+            if ("tool_use".equals(object.get("type").getAsString())) {
+                calls.add(new ToolCall(object.get("id").getAsString(), object.get("name").getAsString(),
+                        object.getAsJsonObject("input")));
+            }
+        }
+        boolean wantsTools = stop != null && "tool_use".equals(stop.getAsString()) && !calls.isEmpty();
+        return new AgentReply(new AgentMessage.Assistant(joinText(content), calls, content), wantsTools);
+    }
+
+    /** The response object with a content array; a refusal becomes {@link AiException.Kind#REFUSED}. */
+    private static JsonObject parse(String body) {
         JsonObject response;
         try {
             response = JsonParser.parseString(body).getAsJsonObject();
@@ -218,15 +338,19 @@ public final class ClaudeProvider implements AiProvider {
         if (stop != null && "refusal".equals(stop.getAsString())) {
             throw new AiException(AiException.Kind.REFUSED, "refused");
         }
+        if (!(response.get("content") instanceof JsonArray)) {
+            throw new AiException(AiException.Kind.BAD_RESPONSE, "no content in response");
+        }
+        return response;
+    }
+
+    private static String joinText(JsonArray content) {
         StringBuilder text = new StringBuilder();
-        for (JsonElement block : response.getAsJsonArray("content")) {
+        for (JsonElement block : content) {
             JsonObject object = block.getAsJsonObject();
             if ("text".equals(object.get("type").getAsString())) {
                 text.append(object.get("text").getAsString());
             }
-        }
-        if (text.isEmpty()) {
-            throw new AiException(AiException.Kind.BAD_RESPONSE, "no text in response");
         }
         return text.toString();
     }

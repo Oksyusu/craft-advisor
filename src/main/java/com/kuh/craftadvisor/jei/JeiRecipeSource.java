@@ -30,7 +30,8 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * Reads recipes from JEI for every category (crafting, smelting, Create machines, ...).
- * Input slots of every ingredient type are read (fluids in mB); the planner decides what to expand.
+ * Input and output slots of every ingredient type are read (fluids in mB); the planner decides what to expand.
+ * Non-item ingredients seen through JEI (fluids, bees, ...) can be looked up too, for display only.
  * Must be used on the client thread. Results are cached per instance, so create one per /ai call.
  */
 public final class JeiRecipeSource implements RecipeSource {
@@ -57,12 +58,14 @@ public final class JeiRecipeSource implements RecipeSource {
     }
 
     private List<RecipeOption> lookup(IngredientKey item) {
-        Optional<ItemStack> stack = Items.stackOf(item);
-        if (stack.isEmpty()) {
+        IFocusFactory focusFactory = runtime.getJeiHelpers().getFocusFactory();
+        Optional<IFocus<?>> found = item.isItem()
+                ? Items.stackOf(item).map(stack -> focusFactory.createFocus(RecipeIngredientRole.OUTPUT, VanillaTypes.ITEM_STACK, stack))
+                : Items.typedOf(item).map(typed -> focusFactory.createFocus(RecipeIngredientRole.OUTPUT, typed));
+        if (found.isEmpty()) {
             return List.of();
         }
-        IFocusFactory focusFactory = runtime.getJeiHelpers().getFocusFactory();
-        IFocus<ItemStack> focus = focusFactory.createFocus(RecipeIngredientRole.OUTPUT, VanillaTypes.ITEM_STACK, stack.get());
+        IFocus<?> focus = found.get();
         IFocusGroup focusGroup = focusFactory.createFocusGroup(List.of(focus));
         IRecipeManager recipeManager = runtime.getRecipeManager();
         IIngredientManager ingredients = runtime.getIngredientManager();
@@ -74,7 +77,7 @@ public final class JeiRecipeSource implements RecipeSource {
     }
 
     private static <T> void collect(IRecipeManager recipeManager, IIngredientManager ingredients,
-                                    IRecipeCategory<T> category, IFocus<ItemStack> focus,
+                                    IRecipeCategory<T> category, IFocus<?> focus,
                                     IFocusGroup focusGroup, IngredientKey item, List<RecipeOption> out) {
         List<IngredientKey> machines = recipeManager.createRecipeCatalystLookup(category.getRecipeType())
                 .getItemStack()
@@ -102,16 +105,27 @@ public final class JeiRecipeSource implements RecipeSource {
             contents.forEach(i -> alternatives.add(Items.keyOf(ingredients, i)));
             inputs.add(new IngredientSlot(List.copyOf(alternatives), amountOf(ingredients, contents.get(0))));
         }
-        int outputCount = slots.getSlotViews(RecipeIngredientRole.OUTPUT).stream()
-                .flatMap(IRecipeSlotView::getItemStacks)
-                .filter(s -> Items.keyOf(ingredients, s).equals(item))
-                .mapToInt(ItemStack::getCount)
-                .findFirst()
-                .orElse(1);
+        List<IngredientSlot> outputs = new ArrayList<>();
+        int outputCount = 0;
+        for (IRecipeSlotView slot : slots.getSlotViews(RecipeIngredientRole.OUTPUT)) {
+            List<ITypedIngredient<?>> contents = slot.getAllIngredients().filter(i -> !isEmptyStack(i)).toList();
+            if (contents.isEmpty()) {
+                continue;
+            }
+            LinkedHashSet<IngredientKey> alternatives = new LinkedHashSet<>();
+            for (ITypedIngredient<?> output : contents) {
+                IngredientKey key = Items.keyOf(ingredients, output);
+                alternatives.add(key);
+                if (outputCount == 0 && key.equals(item)) {
+                    outputCount = amountOf(ingredients, output);
+                }
+            }
+            outputs.add(new IngredientSlot(List.copyOf(alternatives), amountOf(ingredients, contents.get(0))));
+        }
         if (inputs.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(new RecipeOption(inputs, Math.max(1, outputCount), machines, category));
+        return Optional.of(new RecipeOption(inputs, Math.max(1, outputCount), machines, category, outputs));
     }
 
     private static boolean isEmptyStack(ITypedIngredient<?> ingredient) {

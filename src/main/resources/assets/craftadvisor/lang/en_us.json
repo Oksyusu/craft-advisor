@@ -6,6 +6,7 @@
   "craftadvisor.configuration.model": "Claude Model",
   "craftadvisor.configuration.maxCandidates": "Item Candidates for AI",
   "craftadvisor.configuration.adviceMaxTokens": "Advice Max Tokens",
+  "craftadvisor.configuration.maxToolCalls": "AI Lookups per Question",
 
   "craftadvisor.msg.jei_not_ready": "JEI is not ready yet. Try again in a moment.",
   "craftadvisor.msg.need_key": "No item is named exactly \"%s\". Use an exact name or id (e.g. minecraft:piston), or set an API key in Mods > Craft Advisor > Config for natural language.",
@@ -57,7 +58,7 @@
   "craftadvisor.help.consent": "/ai consent: agree to send requests to the AI and continue the held question",
 
   "craftadvisor.consent.header": "AI requests go to %s. Nothing has been sent yet.",
-  "craftadvisor.consent.sends": "Sent: your question, JEI item candidates, the plan computed by code.",
+  "craftadvisor.consent.sends": "Sent: your question, JEI item candidates, the plan computed by code, and JEI items and recipes the AI looks up.",
   "craftadvisor.consent.sends_inventory": "Also sent: an inventory summary (turn off with shareInventory).",
   "craftadvisor.consent.sends_history": "Also sent: your recent /ai conversation (turn off with shareHistory).",
   "craftadvisor.consent.not_sent": "Never sent: player name, server address, coordinates, chat, renamed item names.",
@@ -74,6 +75,9 @@
   "craftadvisor.preview.history": "Earlier conversation: %s turns, %s chars",
   "craftadvisor.preview.section": "[%s] %s chars",
   "craftadvisor.preview.line": "  %s",
+  "craftadvisor.preview.tools": "Tools offered: %s",
+  "craftadvisor.preview.tools_off": "Tools off (share settings): %s",
+  "craftadvisor.preview.tool_results": "Only the first request is shown. Tool results depend on what the AI looks up and follow the share settings above.",
 
   "craftadvisor.msg.show_hover": "Click: show recipes",
   "craftadvisor.msg.no_jei_recipe": "JEI has no recipes for %s.",

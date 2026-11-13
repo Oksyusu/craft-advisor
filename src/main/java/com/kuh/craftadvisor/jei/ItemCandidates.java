@@ -1,26 +1,18 @@
 package com.kuh.craftadvisor.jei;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 
 import com.kuh.craftadvisor.planner.IngredientKey;
+import com.kuh.craftadvisor.tools.NameMatcher;
 
 import mezz.jei.api.runtime.IJeiRuntime;
-import net.minecraft.world.item.ItemStack;
 
 /**
- * Finds JEI items that a free-text question may refer to, using the display name in the current
- * game language and the registry id. The AI then picks one of these candidates.
+ * Finds JEI items that a free-text question may refer to, by name in the current game language, English name
+ * and registry id (see {@link NameMatcher}). The AI then picks one of these candidates.
  */
 public final class ItemCandidates {
-    private static final int MIN_TOKEN_LENGTH = 2;
-    private static final int NAME_IN_QUERY_SCORE = 100;
-    private static final int TOKEN_HIT_SCORE = 10;
 
     public record Candidate(IngredientKey key, String name) {
     }
@@ -32,51 +24,12 @@ public final class ItemCandidates {
     }
 
     public static Result find(IJeiRuntime runtime, String query, int limit) {
-        String normalized = query.trim().toLowerCase(Locale.ROOT);
-        Map<IngredientKey, Candidate> all = new LinkedHashMap<>();
-        for (ItemStack stack : runtime.getIngredientManager().getAllItemStacks()) {
-            IngredientKey key = Items.keyOf(runtime.getIngredientManager(), stack);
-            all.putIfAbsent(key, new Candidate(key, stack.getHoverName().getString()));
-        }
-
-        Optional<Candidate> exact = all.values().stream()
-                .filter(c -> c.key().uid().equalsIgnoreCase(normalized) || c.name().equalsIgnoreCase(normalized))
-                .findFirst();
-
-        List<String> tokens = List.of(normalized.split("\\s+")).stream()
-                .filter(t -> t.length() >= MIN_TOKEN_LENGTH)
-                .toList();
-        List<Scored> scored = new ArrayList<>();
-        for (Candidate candidate : all.values()) {
-            int score = score(candidate, normalized, tokens);
-            if (score > 0) {
-                scored.add(new Scored(candidate, score));
-            }
-        }
-        List<Candidate> top = scored.stream()
-                .sorted(Comparator.comparingInt(Scored::score).reversed())
-                .limit(limit)
-                .map(Scored::candidate)
-                .toList();
-        return new Result(top, exact);
+        NameMatcher matcher = NameIndex.items(runtime.getIngredientManager());
+        List<Candidate> top = matcher.search(query, limit).stream().map(ItemCandidates::candidate).toList();
+        return new Result(top, matcher.exact(query).map(ItemCandidates::candidate));
     }
 
-    private record Scored(Candidate candidate, int score) {
-    }
-
-    /** Whole item name inside the question ("기계식 피스톤 만들고 싶어") beats single word hits. */
-    private static int score(Candidate candidate, String query, List<String> tokens) {
-        String name = candidate.name().toLowerCase(Locale.ROOT);
-        String id = candidate.key().uid().toLowerCase(Locale.ROOT);
-        if (name.length() >= MIN_TOKEN_LENGTH && query.contains(name)) {
-            return NAME_IN_QUERY_SCORE + name.length();
-        }
-        int hits = 0;
-        for (String token : tokens) {
-            if (name.contains(token) || id.contains(token)) {
-                hits++;
-            }
-        }
-        return hits * TOKEN_HIT_SCORE;
+    private static Candidate candidate(NameMatcher.Entry entry) {
+        return new Candidate(entry.key(), entry.name());
     }
 }

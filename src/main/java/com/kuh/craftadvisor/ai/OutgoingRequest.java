@@ -15,8 +15,11 @@ import com.kuh.craftadvisor.planner.IngredientKey;
 /**
  * Everything one AI request carries besides the fixed system prompt. Sending and /ai preview use the same value.
  * Built from the question, JEI data and the plan only: player name, server address and coordinates are never inputs.
+ * For a free question it is the first request of the tool loop; {@code tools} are offered, {@code toolsOff} are
+ * left out by the share settings.
  */
-public record OutgoingRequest(String host, Route route, List<AiProvider.Turn> history, List<Section> sections) {
+public record OutgoingRequest(String host, Route route, List<AiProvider.Turn> history, List<Section> sections,
+        List<ToolSpec> tools, List<String> toolsOff) {
     public static final String NOT_SHARED = "not shared";
     private static final int PLAN_STEPS_FOR_AI = 30;
     private static final Gson GSON = new Gson();
@@ -24,6 +27,8 @@ public record OutgoingRequest(String host, Route route, List<AiProvider.Turn> hi
     public OutgoingRequest {
         history = List.copyOf(history);
         sections = List.copyOf(sections);
+        tools = List.copyOf(tools);
+        toolsOff = List.copyOf(toolsOff);
     }
 
     public enum Route { PICK, ADVICE, CHAT }
@@ -49,7 +54,8 @@ public record OutgoingRequest(String host, Route route, List<AiProvider.Turn> hi
     public static OutgoingRequest pick(String host, String query, List<String> candidateLines) {
         return new OutgoingRequest(host, Route.PICK, List.of(), List.of(
                 new Section("request", "Request: " + query),
-                new Section("candidates", "Candidates (id | name):\n" + String.join("\n", candidateLines))));
+                new Section("candidates", "Candidates (id | name):\n" + String.join("\n", candidateLines))),
+                List.of(), List.of());
     }
 
     /**
@@ -65,17 +71,24 @@ public record OutgoingRequest(String host, Route route, List<AiProvider.Turn> hi
         if (!sharing.inventory()) {
             sections.add(new Section("note", "Note: counts are totals; inventory not shared."));
         }
-        return new OutgoingRequest(host, Route.ADVICE, List.of(), sections);
+        return new OutgoingRequest(host, Route.ADVICE, List.of(), sections, List.of(), List.of());
     }
 
-    public static OutgoingRequest chat(String host, String question, List<AiProvider.Turn> history,
-            String inventorySummary, Sharing sharing) {
-        return new OutgoingRequest(host, Route.CHAT, sharing.history() ? history : List.of(), List.of(
-                new Section("question", question),
-                new Section("inventory", "(Inventory: " + (sharing.inventory() ? inventorySummary : NOT_SHARED) + ")")));
+    /**
+     * A free question. Game data reaches the AI only through {@code tools}, which the caller already filtered by
+     * {@code sharing}; when inventory is not shared, a note says so.
+     */
+    public static OutgoingRequest chat(String host, String question, List<AiProvider.Turn> history, Sharing sharing,
+            List<ToolSpec> tools, List<String> toolsOff) {
+        List<Section> sections = new ArrayList<>(List.of(new Section("question", question)));
+        if (!sharing.inventory()) {
+            sections.add(new Section("inventory", "(Inventory: " + NOT_SHARED + ")"));
+        }
+        return new OutgoingRequest(host, Route.CHAT, sharing.history() ? history : List.of(), sections, tools, toolsOff);
     }
 
-    static String planJson(CraftPlan plan, Function<IngredientKey, String> names) {
+    /** The plan as the AI sees it; numbers are the planner's, never changed. */
+    public static String planJson(CraftPlan plan, Function<IngredientKey, String> names) {
         Map<String, Object> json = Map.of(
                 "target", names.apply(plan.target()),
                 "machines", plan.machines().stream().map(names).toList(),

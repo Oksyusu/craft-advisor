@@ -1,31 +1,35 @@
 package com.kuh.craftadvisor.command;
 
 import java.util.ArrayDeque;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import com.kuh.craftadvisor.ClientConfig;
+import com.kuh.craftadvisor.CraftAdvisor;
 import com.kuh.craftadvisor.RecipePreferencesFile;
 import com.kuh.craftadvisor.ai.AiException;
 import com.kuh.craftadvisor.ai.AiProvider;
 import com.kuh.craftadvisor.ai.ClaudeProvider;
 import com.kuh.craftadvisor.ai.ItemPick;
 import com.kuh.craftadvisor.ai.OutgoingRequest;
+import com.kuh.craftadvisor.ai.ToolLoop;
+import com.kuh.craftadvisor.ai.ToolSpec;
 import com.kuh.craftadvisor.chat.ChatOut;
 import com.kuh.craftadvisor.clipboard.MaterialOutput;
 import com.kuh.craftadvisor.jei.CraftAdvisorJeiPlugin;
 import com.kuh.craftadvisor.jei.ItemCandidates;
 import com.kuh.craftadvisor.jei.Items;
 import com.kuh.craftadvisor.jei.JeiRecipeSource;
+import com.kuh.craftadvisor.jei.JeiTools;
 import com.kuh.craftadvisor.planner.CraftPlan;
 import com.kuh.craftadvisor.planner.CraftPlanner;
 import com.kuh.craftadvisor.planner.IngredientKey;
+import com.kuh.craftadvisor.tools.AdvisorTools;
 
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.recipe.RecipeIngredientRole;
@@ -41,7 +45,6 @@ import net.minecraft.world.item.ItemStack;
 final class AdvisorFlow {
     private static final int TARGET_AMOUNT = 1;
     private static final int MAX_HISTORY_TURNS = 12;
-    private static final int INVENTORY_SUMMARY_ITEMS = 40;
     private static final int PREVIEW_LINES = 3;
     private static final int PREVIEW_LINE_CHARS = 120;
     /** Recent free-question turns; only touched on the client thread. */
@@ -103,7 +106,7 @@ final class AdvisorFlow {
             ChatOut.error("craftadvisor.msg.need_key", query);
             return;
         }
-        showPreview(found.candidates().isEmpty() ? chatRequest(query) : pickRequest(query, found));
+        showPreview(found.candidates().isEmpty() ? chatRequest(query, sharing()) : pickRequest(query, found));
     }
 
     /** Saves consent for the current host and runs the held AI step, if any. */
@@ -177,9 +180,17 @@ final class AdvisorFlow {
         onClientThread(ai.answer(request), ChatOut::advice);
     }
 
+    /** The tool loop: the AI looks up game data on the client thread until it answers. Only Q and A are kept. */
     private static void askFreeQuestion(AiProvider ai, String question) {
         ChatOut.info("craftadvisor.msg.thinking");
-        onClientThread(ai.answer(chatRequest(question)), answer -> {
+        OutgoingRequest.Sharing sharing = sharing();
+        OutgoingRequest request = chatRequest(question, sharing);
+        ToolLoop loop = new ToolLoop(ai, request.tools(), new JeiTools(sharing, AdvisorFlow::inventory),
+                ClientConfig.MAX_TOOL_CALLS.get());
+        long started = System.nanoTime();
+        onClientThread(loop.run(request), answer -> {
+            CraftAdvisor.LOGGER.debug("Free question answered in {} ms",
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
             remember(new AiProvider.Turn(true, question));
             remember(new AiProvider.Turn(false, answer));
             ChatOut.advice(answer);
@@ -198,8 +209,9 @@ final class AdvisorFlow {
         return OutgoingRequest.pick(ClaudeProvider.HOST, query, lines);
     }
 
-    private static OutgoingRequest chatRequest(String question) {
-        return OutgoingRequest.chat(ClaudeProvider.HOST, question, List.copyOf(HISTORY), inventorySummary(), sharing());
+    private static OutgoingRequest chatRequest(String question, OutgoingRequest.Sharing sharing) {
+        return OutgoingRequest.chat(ClaudeProvider.HOST, question, List.copyOf(HISTORY), sharing,
+                AdvisorTools.offered(sharing), AdvisorTools.off(sharing));
     }
 
     private static OutgoingRequest.Sharing sharing() {
@@ -233,6 +245,12 @@ final class AdvisorFlow {
         if (request.route() == OutgoingRequest.Route.CHAT) {
             int chars = request.history().stream().mapToInt(turn -> turn.text().length()).sum();
             ChatOut.info("craftadvisor.preview.history", request.history().size(), chars);
+            List<String> tools = request.tools().stream().map(ToolSpec::name).toList();
+            ChatOut.info("craftadvisor.preview.tools", String.join(", ", tools));
+            if (!request.toolsOff().isEmpty()) {
+                ChatOut.info("craftadvisor.preview.tools_off", String.join(", ", request.toolsOff()));
+            }
+            ChatOut.info("craftadvisor.preview.tool_results");
         }
         for (OutgoingRequest.Section section : request.sections()) {
             ChatOut.info("craftadvisor.preview.section", section.name(), section.text().length());
@@ -274,18 +292,5 @@ final class AdvisorFlow {
         Minecraft minecraft = Minecraft.getInstance();
         return minecraft.player == null ? Map.of()
                 : Items.countAll(runtime.getIngredientManager(), minecraft.player.getInventory());
-    }
-
-    private static String inventorySummary() {
-        Minecraft minecraft = Minecraft.getInstance();
-        Optional<IJeiRuntime> runtime = CraftAdvisorJeiPlugin.runtime();
-        if (minecraft.player == null || runtime.isEmpty()) {
-            return "unknown";
-        }
-        return Items.countAll(runtime.get().getIngredientManager(), minecraft.player.getInventory()).entrySet().stream()
-                .sorted(Map.Entry.<IngredientKey, Integer>comparingByValue(Comparator.reverseOrder()))
-                .limit(INVENTORY_SUMMARY_ITEMS)
-                .map(e -> Items.nameOf(e.getKey()).getString() + " x" + e.getValue())
-                .collect(Collectors.joining(", "));
     }
 }
