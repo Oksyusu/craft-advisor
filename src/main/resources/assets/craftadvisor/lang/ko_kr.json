@@ -81,5 +81,21 @@
 
   "craftadvisor.msg.show_hover": "클릭: 레시피 보기",
   "craftadvisor.msg.no_jei_recipe": "JEI에 %s 레시피가 없습니다.",
-  "craftadvisor.help.show": "/ai show <아이템 ID>: 아이템의 JEI 레시피 화면을 엽니다 (채팅 링크가 씀)"
+  "craftadvisor.help.show": "/ai show <아이템 ID>: 아이템의 JEI 레시피 화면을 엽니다 (채팅 링크가 씀)",
+
+  "craftadvisor.help.add": "/ai add <아이템> [x개수]: 목표를 목록에 넣습니다 (개수 1~999, x4·×4·4개, 기본 1)",
+  "craftadvisor.help.list": "/ai list: 모든 목표의 부족 재료를 합쳐 보여 줍니다 (재고는 한 번만 셈)",
+  "craftadvisor.help.remove": "/ai remove <번호>: /ai list에 나온 번호의 목표를 뺍니다",
+  "craftadvisor.help.clear": "/ai clear: 목표 목록을 비웁니다",
+  "craftadvisor.list.added": "목표 목록: %s x%s (목표 %s개). 합계는 /ai list로 봅니다.",
+  "craftadvisor.list.removed": "%s x%s 목표를 뺐습니다 (남은 목표 %s개).",
+  "craftadvisor.list.cleared": "목표 목록을 비웠습니다.",
+  "craftadvisor.list.empty": "목표 목록이 비어 있습니다. /ai add <아이템> [x개수]로 넣으세요.",
+  "craftadvisor.list.full": "목표 목록이 가득 찼습니다 (%s개). /ai remove <번호>로 하나를 빼세요.",
+  "craftadvisor.list.bad_amount": "개수는 %s~%s만 됩니다. 예: x4, ×4, 4개",
+  "craftadvisor.list.bad_number": "\"%s\"번 목표가 없습니다. 번호는 /ai list로 확인하세요.",
+  "craftadvisor.list.not_found": "목표 아이템을 찾지 못했어요: \"%s\". 목록에 넣지 않았습니다.",
+  "craftadvisor.list.header": "목표 %s개:",
+  "craftadvisor.list.goal_line": " %s. %s x%s",
+  "craftadvisor.clipboard.header_goals": "목표 %s개 합계"
 }

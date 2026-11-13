@@ -2,6 +2,7 @@ package com.kuh.craftadvisor.clipboard;
 
 import com.kuh.craftadvisor.chat.ChatOut;
 import com.kuh.craftadvisor.planner.CraftPlan;
+import com.kuh.craftadvisor.planner.MultiPlan;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -21,6 +22,18 @@ public final class MaterialOutput {
             return;
         }
         // CreateClipboardWriter is only touched (and so only class-loaded) when Create is present.
+        if (CreateClipboardWriter.isHoldingClipboard(player)) {
+            CreateClipboardWriter.write(player, plan);
+        }
+    }
+
+    /** The goal list: chat, and the merged missing materials on a held clipboard. */
+    public static void show(MultiPlan plan) {
+        ChatOut.goals(plan);
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null || !CREATE_LOADED || plan.missing().isEmpty()) {
+            return;
+        }
         if (CreateClipboardWriter.isHoldingClipboard(player)) {
             CreateClipboardWriter.write(player, plan);
         }

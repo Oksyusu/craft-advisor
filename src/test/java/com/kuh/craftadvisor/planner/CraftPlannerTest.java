@@ -301,4 +301,95 @@ class CraftPlannerTest {
         assertEquals(List.of(missing("minecraft:oak_log", 1, StopReason.NO_RECIPE)), plan.missing());
         assertEquals(List.of(plankChoice("minecraft:oak_planks", ChoiceReason.DEFAULT)), plan.choices());
     }
+
+    // --- planAll (spec 04) ---
+
+    private static Goal goal(String id, int amount) {
+        return new Goal(IngredientKey.item(id), amount);
+    }
+
+    @Test
+    void sharedInventoryIsCountedOnceAcrossGoals() {
+        Book book = new Book()
+                .add("test:press", 1, slot("minecraft:iron_ingot", 10))
+                .add("test:drill", 1, slot("minecraft:iron_ingot", 10));
+
+        MultiPlan plan = new CraftPlanner(book).planAll(
+                List.of(goal("test:press", 1), goal("test:drill", 1)), inv("minecraft:iron_ingot", 10));
+
+        assertEquals(List.of(missing("minecraft:iron_ingot", 10, StopReason.NO_RECIPE)), plan.missing());
+        // the first goal took the stock, so the second one is short
+        assertEquals(Map.of(IngredientKey.item("minecraft:iron_ingot"), Map.of(1, 10)), plan.missingByGoal());
+    }
+
+    @Test
+    void leftoverOfFirstGoalIsUsedBySecondGoal() {
+        Book book = new Book()
+                .add("test:frame", 1, slot("minecraft:oak_planks", 3))
+                .add("test:shelf", 1, slot("minecraft:oak_planks", 1))
+                .add("minecraft:oak_planks", 4, slot("minecraft:oak_log", 1));
+
+        MultiPlan plan = new CraftPlanner(book).planAll(
+                List.of(goal("test:frame", 1), goal("test:shelf", 1)), Map.of());
+
+        assertEquals(List.of(missing("minecraft:oak_log", 1, StopReason.NO_RECIPE)), plan.missing());
+        assertEquals(1, plan.steps().stream()
+                .filter(s -> s.item().uid().equals("minecraft:oak_planks")).mapToInt(CraftPlan.Step::crafts).sum());
+    }
+
+    @Test
+    void missingByGoalAddsUpToEachMissingCount() {
+        MultiPlan plan = new CraftPlanner(vanillaPiston()).planAll(
+                List.of(goal("minecraft:piston", 2), goal("minecraft:iron_block", 1), goal("minecraft:piston", 1)),
+                inv("minecraft:cobblestone", 5, "minecraft:iron_ingot", 4));
+
+        assertEquals(plan.missing().stream().map(Missing::item).toList(), List.copyOf(plan.missingByGoal().keySet()));
+        for (Missing m : plan.missing()) {
+            int byGoals = plan.missingByGoal().get(m.item()).values().stream().mapToInt(Integer::intValue).sum();
+            assertEquals(m.count(), byGoals, m.item().uid());
+        }
+        // raw iron: piston x2 uses 2 owned ingots, the block 2 owned + 7 crafted, the last piston 1 crafted
+        assertEquals(Map.of(1, 7, 2, 1), plan.missingByGoal().get(IngredientKey.item("minecraft:raw_iron")));
+    }
+
+    @Test
+    void sameStepsOfDifferentGoalsAreMerged() {
+        Book book = new Book()
+                .add("test:frame", 1, slot("minecraft:oak_planks", 4))
+                .add("minecraft:oak_planks", 4, slot("minecraft:oak_log", 1));
+
+        MultiPlan plan = new CraftPlanner(book).planAll(
+                List.of(goal("test:frame", 1), goal("test:frame", 2)), Map.of());
+
+        assertEquals(List.of("test:frame", "minecraft:oak_planks"),
+                plan.steps().stream().map(s -> s.item().uid()).toList());
+        assertEquals(List.of(3, 3), plan.steps().stream().map(CraftPlan.Step::crafts).toList());
+        assertEquals(List.of(missing("minecraft:oak_log", 3, StopReason.NO_RECIPE)), plan.missing());
+    }
+
+    @Test
+    void singleGoalPlanAllMatchesPlan() {
+        IngredientKey piston = IngredientKey.item("minecraft:piston");
+        Map<IngredientKey, Integer> inventory = inv("minecraft:oak_planks", 2, "minecraft:iron_ingot", 1);
+        CraftPlanner planner = new CraftPlanner(vanillaPiston());
+
+        CraftPlan single = planner.plan(piston, 2, inventory);
+        MultiPlan all = planner.planAll(List.of(new Goal(piston, 2)), inventory);
+
+        assertEquals(single.steps(), all.steps());
+        assertEquals(single.missing(), all.missing());
+        assertEquals(single.machines(), all.machines());
+        assertEquals(single.choices(), all.choices());
+        for (Missing m : all.missing()) {
+            assertEquals(Map.of(0, m.count()), all.missingByGoal().get(m.item()));
+        }
+    }
+
+    @Test
+    void emptyGoalListPlansNothing() {
+        MultiPlan plan = new CraftPlanner(vanillaPiston()).planAll(List.of(), inv("minecraft:cobblestone", 1));
+
+        assertEquals(List.of(), plan.steps());
+        assertEquals(List.of(), plan.missing());
+    }
 }

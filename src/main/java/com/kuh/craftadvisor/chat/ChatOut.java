@@ -7,7 +7,9 @@ import com.kuh.craftadvisor.RecipePreferencesFile;
 import com.kuh.craftadvisor.jei.Items;
 import com.kuh.craftadvisor.jei.JeiRecipeSource;
 import com.kuh.craftadvisor.planner.CraftPlan;
+import com.kuh.craftadvisor.planner.Goal;
 import com.kuh.craftadvisor.planner.IngredientKey;
+import com.kuh.craftadvisor.planner.MultiPlan;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -50,12 +52,42 @@ public final class ChatOut {
             return;
         }
         info("craftadvisor.msg.missing_header");
-        for (CraftPlan.Missing missing : plan.missing()) {
+        missingLines(plan.missing());
+        choices(plan.choices());
+    }
+
+    /** The /ai list result: numbered goals, then machines and missing materials of all goals together. */
+    public static void goals(MultiPlan plan) {
+        info("craftadvisor.list.header", plan.goals().size());
+        for (int i = 0; i < plan.goals().size(); i++) {
+            Goal goal = plan.goals().get(i);
+            info("craftadvisor.list.goal_line", i + 1, link(goal.item()), goal.amount());
+        }
+        if (!plan.machines().isEmpty()) {
+            info("craftadvisor.msg.machines", joinNames(plan.machines()));
+        }
+        if (plan.missing().isEmpty()) {
+            info("craftadvisor.msg.nothing_missing");
+            return;
+        }
+        info("craftadvisor.msg.missing_header");
+        missingLines(plan.missing());
+    }
+
+    public static void goalAdded(Goal goal, int goalCount) {
+        info("craftadvisor.list.added", link(goal.item()), goal.amount(), goalCount);
+    }
+
+    public static void goalRemoved(Goal goal, int goalCount) {
+        info("craftadvisor.list.removed", link(goal.item()), goal.amount(), goalCount);
+    }
+
+    private static void missingLines(List<CraftPlan.Missing> missingList) {
+        for (CraftPlan.Missing missing : missingList) {
             String line = isFluid(missing.item()) ? "craftadvisor.msg.missing_line_fluid" : "craftadvisor.msg.missing_line";
             send(Component.translatable(line,
                     link(missing.item()), missing.count(), reasonSuffix(missing.reason())));
         }
-        choices(plan.choices());
     }
 
     /** Amount with its unit for plain text: "x4" for items, "1000 mB" for fluids. */

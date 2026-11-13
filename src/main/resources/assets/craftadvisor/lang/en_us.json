@@ -81,5 +81,21 @@
 
   "craftadvisor.msg.show_hover": "Click: show recipes",
   "craftadvisor.msg.no_jei_recipe": "JEI has no recipes for %s.",
-  "craftadvisor.help.show": "/ai show <item id>: open the JEI recipes of an item (used by the chat links)"
+  "craftadvisor.help.show": "/ai show <item id>: open the JEI recipes of an item (used by the chat links)",
+
+  "craftadvisor.help.add": "/ai add <item> [x count]: add a goal to the list (count 1-999 as x4, ×4 or 4개; default 1)",
+  "craftadvisor.help.list": "/ai list: missing materials of all goals together, counting the inventory once",
+  "craftadvisor.help.remove": "/ai remove <number>: remove a goal by its number in /ai list",
+  "craftadvisor.help.clear": "/ai clear: empty the goal list",
+  "craftadvisor.list.added": "Goal list: %s x%s (%s goals). See the total with /ai list.",
+  "craftadvisor.list.removed": "Removed %s x%s (%s goals left).",
+  "craftadvisor.list.cleared": "The goal list is now empty.",
+  "craftadvisor.list.empty": "The goal list is empty. Add goals with /ai add <item> [x count].",
+  "craftadvisor.list.full": "The goal list is full (%s goals). Remove one with /ai remove <number>.",
+  "craftadvisor.list.bad_amount": "The count must be %s to %s, e.g. x4, ×4 or 4개.",
+  "craftadvisor.list.bad_number": "There is no goal number \"%s\". See the numbers with /ai list.",
+  "craftadvisor.list.not_found": "Could not find a goal item for \"%s\". Nothing was added.",
+  "craftadvisor.list.header": "Goals (%s):",
+  "craftadvisor.list.goal_line": " %s. %s x%s",
+  "craftadvisor.clipboard.header_goals": "Total for %s goals"
 }

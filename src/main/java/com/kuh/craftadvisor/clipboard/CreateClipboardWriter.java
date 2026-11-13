@@ -6,6 +6,7 @@ import java.util.List;
 import com.kuh.craftadvisor.chat.ChatOut;
 import com.kuh.craftadvisor.jei.Items;
 import com.kuh.craftadvisor.planner.CraftPlan;
+import com.kuh.craftadvisor.planner.MultiPlan;
 import com.simibubi.create.AllDataComponents;
 import com.simibubi.create.content.equipment.clipboard.ClipboardContent;
 import com.simibubi.create.content.equipment.clipboard.ClipboardEditPacket;
@@ -36,17 +37,29 @@ final class CreateClipboardWriter {
     }
 
     static void write(LocalPlayer player, CraftPlan plan) {
+        String header = Component.translatable("craftadvisor.clipboard.header", Items.nameOf(plan.target())).getString();
+        if (!append(player, header, plan.missing())) {
+            ChatOut.plan(plan);
+        }
+    }
+
+    /** The merged missing materials of the goal list, as one set of pages. */
+    static void write(LocalPlayer player, MultiPlan plan) {
+        String header = Component.translatable("craftadvisor.clipboard.header_goals", plan.goals().size()).getString();
+        append(player, header, plan.missing());
+    }
+
+    /** Appends pages after the existing ones; false (with a chat error) when the clipboard has no free page. */
+    private static boolean append(LocalPlayer player, String header, List<CraftPlan.Missing> missing) {
         ItemStack held = player.getMainHandItem();
         List<List<ClipboardEntry>> pages = ClipboardEntry.readAll(held);
         int budget = ClipboardPages.MAX_PAGES - pages.size();
         if (budget <= 0) {
             ChatOut.error("craftadvisor.msg.clipboard_full");
-            ChatOut.plan(plan);
-            return;
+            return false;
         }
 
-        String header = Component.translatable("craftadvisor.clipboard.header", Items.nameOf(plan.target())).getString();
-        List<List<ClipboardEntry>> added = ClipboardPages.split(new Line(header, ItemStack.EMPTY, 0), lines(plan), budget)
+        List<List<ClipboardEntry>> added = ClipboardPages.split(new Line(header, ItemStack.EMPTY, 0), lines(missing), budget)
                 .stream()
                 .map(page -> page.stream().map(Line::toEntry).toList())
                 .toList();
@@ -63,13 +76,14 @@ final class CreateClipboardWriter {
 
         int written = ClipboardPages.itemsWritten(added);
         ChatOut.info("craftadvisor.msg.clipboard_written", written, added.size());
-        if (written < plan.missing().size()) {
-            ChatOut.error("craftadvisor.msg.clipboard_truncated", plan.missing().size() - written);
+        if (written < missing.size()) {
+            ChatOut.error("craftadvisor.msg.clipboard_truncated", missing.size() - written);
         }
+        return true;
     }
 
-    private static List<Line> lines(CraftPlan plan) {
-        return plan.missing().stream()
+    private static List<Line> lines(List<CraftPlan.Missing> missing) {
+        return missing.stream()
                 .map(m -> {
                     String text = Items.nameOf(m.item()).getString() + " " + ChatOut.amountText(m.item(), m.count())
                             + ChatOut.reasonSuffix(m.reason()).getString();

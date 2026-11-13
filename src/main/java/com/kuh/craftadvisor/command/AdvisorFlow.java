@@ -121,6 +121,45 @@ final class AdvisorFlow {
         }
     }
 
+    /**
+     * Item lookup for /ai add: an exact name or id, else the AI's pick (with a key and consent). Unlike
+     * {@link #start}, a question or an unknown pick only says the item was not found; it is never answered.
+     */
+    static void findGoal(String query, Consumer<IngredientKey> onFound) {
+        Optional<IJeiRuntime> runtime = CraftAdvisorJeiPlugin.runtime();
+        if (runtime.isEmpty()) {
+            ChatOut.error("craftadvisor.msg.jei_not_ready");
+            return;
+        }
+        ItemCandidates.Result found = ItemCandidates.find(runtime.get(), query, ClientConfig.MAX_CANDIDATES.get());
+        if (found.exact().isPresent()) {
+            onFound.accept(found.exact().get().key());
+            return;
+        }
+        Optional<AiProvider> ai = provider();
+        if (ai.isEmpty()) {
+            ChatOut.error("craftadvisor.msg.need_key", query);
+            return;
+        }
+        if (found.candidates().isEmpty()) {
+            ChatOut.error("craftadvisor.list.not_found", query);
+            return;
+        }
+        if (!consented(() -> findGoal(query, onFound))) {
+            return;
+        }
+        ChatOut.info("craftadvisor.msg.searching", query);
+        onClientThread(ai.get().pickItem(pickRequest(query, found)), pick -> {
+            boolean known = pick.wantsCraft()
+                    && found.candidates().stream().anyMatch(c -> c.key().uid().equals(pick.itemId()));
+            if (known) {
+                onFound.accept(IngredientKey.item(pick.itemId()));
+            } else {
+                ChatOut.error("craftadvisor.list.not_found", query);
+            }
+        });
+    }
+
     private static void onPicked(IJeiRuntime runtime, AiProvider ai, String query, ItemCandidates.Result found, ItemPick pick) {
         boolean known = pick.wantsCraft()
                 && found.candidates().stream().anyMatch(c -> c.key().uid().equals(pick.itemId()));
@@ -288,7 +327,7 @@ final class AdvisorFlow {
         return Items.nameOf(key).getString() + " (" + key + ")";
     }
 
-    private static Map<IngredientKey, Integer> inventory(IJeiRuntime runtime) {
+    static Map<IngredientKey, Integer> inventory(IJeiRuntime runtime) {
         Minecraft minecraft = Minecraft.getInstance();
         return minecraft.player == null ? Map.of()
                 : Items.countAll(runtime.getIngredientManager(), minecraft.player.getInventory());
