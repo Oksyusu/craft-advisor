@@ -146,12 +146,30 @@ final class AdvisorFlow {
             ChatOut.info("craftadvisor.msg.advice_needs_key");
             return;
         }
-        OutgoingRequest request = OutgoingRequest.advice(ClaudeProvider.HOST, query, plan, planner, sharing(),
-                AdvisorFlow::name);
-        if (!consented(() -> advise(ai.get(), request))) {
+        if (!consented(() -> adviseAfterConsent(target, query))) {
             return;
         }
-        advise(ai.get(), request);
+        advise(ai.get(), adviceRequest(query, plan, planner));
+    }
+
+    /**
+     * Held advice, run by /ai consent: rebuilt now so the current key, inventory and share settings apply
+     * (not the ones from when it was held). The JEI screen and clipboard were already handled.
+     */
+    private static void adviseAfterConsent(IngredientKey target, String query) {
+        Optional<IJeiRuntime> runtime = CraftAdvisorJeiPlugin.runtime();
+        Optional<AiProvider> ai = provider();
+        if (runtime.isEmpty() || ai.isEmpty()) {
+            ChatOut.info("craftadvisor.msg.advice_needs_key");
+            return;
+        }
+        CraftPlanner planner = new CraftPlanner(new JeiRecipeSource(runtime.get()), RecipePreferencesFile.load());
+        CraftPlan plan = planner.plan(target, TARGET_AMOUNT, inventory(runtime.get()));
+        advise(ai.get(), adviceRequest(query, plan, planner));
+    }
+
+    private static OutgoingRequest adviceRequest(String query, CraftPlan plan, CraftPlanner planner) {
+        return OutgoingRequest.advice(ClaudeProvider.HOST, query, plan, planner, sharing(), AdvisorFlow::name);
     }
 
     private static void advise(AiProvider ai, OutgoingRequest request) {

@@ -27,7 +27,8 @@ public final class ClientConfig {
             .define("shareInventory", true);
 
     public static final ModConfigSpec.BooleanValue SHARE_HISTORY = BUILDER
-            .comment("Send the recent /ai conversation with free questions.")
+            .comment("Send the recent /ai conversation with free questions. Earlier answers may mention your inventory;"
+                    + " restart the game to clear the conversation after turning shareInventory off.")
             .define("shareHistory", true);
 
     public static final ModConfigSpec.ConfigValue<String> CONSENTED_HOST = BUILDER
