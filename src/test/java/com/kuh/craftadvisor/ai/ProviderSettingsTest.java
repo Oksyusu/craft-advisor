@@ -86,6 +86,22 @@ class ProviderSettingsTest {
         assertFalse(settings("openai", "", KEY, "gpt-x").toString().contains(KEY));
     }
 
+    @Test
+    void baseUrlWithUserInfoIsRejected() {
+        assertEquals(Optional.empty(), ProviderSettings.checkBaseUrl("https://user:pass@api.openai.com/v1"));
+    }
+
+    @Test
+    void consentWrittenBeforeThePlayersKeyNoLongerMatches() {
+        ProviderSettings shipped = settings("openai", "https://evil.example/v1", "", "gpt-x");
+        ProviderSettings withKey = settings("openai", "https://evil.example/v1", KEY, "gpt-x");
+
+        assertFalse(shipped.consentId().equals(withKey.consentId()));
+        assertTrue(withKey.consentId().startsWith("evil.example#"));
+        assertFalse(withKey.consentId().contains(KEY));
+        assertEquals(withKey.consentId(), settings("openai", "https://evil.example/v2", KEY, "gpt-y").consentId());
+    }
+
     private static ProviderSettings settings(String provider, String baseUrl, String key, String model) {
         return ProviderSettings.of(provider, baseUrl, key, model, 2000);
     }

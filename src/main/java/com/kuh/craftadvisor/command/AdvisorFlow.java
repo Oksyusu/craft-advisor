@@ -21,6 +21,7 @@ import com.kuh.craftadvisor.ai.Providers;
 import com.kuh.craftadvisor.ai.ToolLoop;
 import com.kuh.craftadvisor.ai.ToolSpec;
 import com.kuh.craftadvisor.chat.ChatOut;
+import com.kuh.craftadvisor.chat.ChatText;
 import com.kuh.craftadvisor.clipboard.MaterialOutput;
 import com.kuh.craftadvisor.jei.CraftAdvisorJeiPlugin;
 import com.kuh.craftadvisor.jei.ItemCandidates;
@@ -52,7 +53,11 @@ final class AdvisorFlow {
     /** Recent free-question turns; only touched on the client thread. */
     private static final Deque<AiProvider.Turn> HISTORY = new ArrayDeque<>();
     /** The one AI step held until /ai consent; only touched on the client thread. */
-    private static Runnable pendingAfterConsent;
+    private static Held pendingAfterConsent;
+
+    /** An AI step waiting for /ai consent, with what the consent notice was shown for. */
+    private record Held(String consentId, Runnable run) {
+    }
 
     private AdvisorFlow() {
     }
@@ -118,13 +123,20 @@ final class AdvisorFlow {
             showProviderProblem(settings.status());
             return;
         }
-        ClientConfig.CONSENTED_HOST.set(settings.host());
+        Held held = pendingAfterConsent;
+        pendingAfterConsent = null;
+        if (held != null && !held.consentId().equals(settings.consentId())) {
+            // The settings changed after the notice: explain the current host instead of agreeing to it unseen.
+            if (consented(held.run())) {
+                held.run().run();
+            }
+            return;
+        }
+        ClientConfig.CONSENTED_HOST.set(settings.consentId());
         ClientConfig.CONSENTED_HOST.save();
         ChatOut.info("craftadvisor.consent.saved", settings.host());
-        Runnable pending = pendingAfterConsent;
-        pendingAfterConsent = null;
-        if (pending != null) {
-            pending.run();
+        if (held != null) {
+            held.run().run();
         }
     }
 
@@ -270,10 +282,10 @@ final class AdvisorFlow {
      */
     private static boolean consented(Runnable pending) {
         ProviderSettings settings = Providers.current();
-        if (settings.isLocal() || settings.host().equals(ClientConfig.CONSENTED_HOST.get())) {
+        if (settings.isLocal() || settings.consentId().equals(ClientConfig.CONSENTED_HOST.get())) {
             return true;
         }
-        pendingAfterConsent = pending;
+        pendingAfterConsent = new Held(settings.consentId(), pending);
         ChatOut.info("craftadvisor.consent.header", settings.host());
         ChatOut.info("craftadvisor.consent.sends");
         if (ClientConfig.SHARE_INVENTORY.get()) {
@@ -373,7 +385,7 @@ final class AdvisorFlow {
 
     private static void showAiError(AiException error) {
         String key = "craftadvisor.ai." + error.kind().name().toLowerCase(java.util.Locale.ROOT);
-        ChatOut.error(key, error.getMessage());
+        ChatOut.error(key, ChatText.clean(String.valueOf(error.getMessage()), ChatText.ERROR_MAX_CHARS));
     }
 
     private static String name(IngredientKey key) {

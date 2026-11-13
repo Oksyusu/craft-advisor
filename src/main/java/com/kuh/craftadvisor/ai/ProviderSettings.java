@@ -1,6 +1,10 @@
 package com.kuh.craftadvisor.ai;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
@@ -12,6 +16,7 @@ import java.util.Set;
 public record ProviderSettings(Kind kind, String baseUrl, String apiKey, String model, int answerMaxTokens) {
     public static final String DEFAULT_MODEL = "claude-opus-5-5";
     private static final Set<String> LOCAL_HOSTS = Set.of("localhost", "127.0.0.1", "::1", "[::1]");
+    private static final int FINGERPRINT_BYTES = 6;
 
     public enum Kind {
         ANTHROPIC("https://api.anthropic.com/v1"),
@@ -78,7 +83,8 @@ public record ProviderSettings(Kind kind, String baseUrl, String apiKey, String 
             return Optional.empty();
         }
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-        if (uri.getHost() == null || uri.getRawQuery() != null || uri.getRawFragment() != null) {
+        if (uri.getHost() == null || uri.getRawUserInfo() != null || uri.getRawQuery() != null
+                || uri.getRawFragment() != null) {
             return Optional.empty();
         }
         boolean allowed = scheme.equals("https") || scheme.equals("http") && isLocalHost(uri.getHost());
@@ -92,6 +98,26 @@ public record ProviderSettings(Kind kind, String baseUrl, String apiKey, String 
     /** Where requests go (shown in the consent notice and preview); empty when offline or the URL is not allowed. */
     public String host() {
         return kind == Kind.OFFLINE ? "" : baseUri().map(URI::getHost).orElse("");
+    }
+
+    /**
+     * What /ai consent records: the host and a short fingerprint of the key, never the key itself. A consent
+     * written into a shared config (a modpack) stops matching once the player puts in their own key.
+     */
+    public String consentId() {
+        return host() + "#" + keyFingerprint(apiKey);
+    }
+
+    static String keyFingerprint(String key) {
+        if (key == null || key.isEmpty()) {
+            return "nokey";
+        }
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(key.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash, 0, FINGERPRINT_BYTES);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is missing from the JDK", e);
+        }
     }
 
     /** Requests stay on this computer, so no consent is needed. */

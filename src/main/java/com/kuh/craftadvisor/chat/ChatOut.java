@@ -37,7 +37,7 @@ public final class ChatOut {
     public static void advice(String text) {
         for (String line : text.strip().split("\\R")) {
             if (!line.isBlank()) {
-                send(Component.literal(line).withStyle(ChatFormatting.AQUA));
+                send(Component.literal(ChatText.clean(line, Integer.MAX_VALUE)).withStyle(ChatFormatting.AQUA));
             }
         }
     }

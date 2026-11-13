@@ -1,10 +1,12 @@
 package com.kuh.craftadvisor.ai;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -27,6 +29,8 @@ final class AiHttp {
     private static final int OK = 200;
     private static final int BAD_REQUEST = 400;
     private static final String REDACTED = "***";
+    /** Real answers are far smaller; a larger body is refused instead of filling memory. */
+    private static final int MAX_BODY_BYTES = 2 * 1024 * 1024;
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_2)
@@ -99,13 +103,24 @@ final class AiHttp {
         HttpRequest.Builder request = HttpRequest.newBuilder(endpoint)
                 .timeout(REQUEST_TIMEOUT)
                 .POST(HttpRequest.BodyPublishers.ofString(json));
-        headers.forEach(request::header);
+        try {
+            headers.forEach(request::header);
+        } catch (IllegalArgumentException e) {
+            // The JDK message quotes the header value, which holds the key: never pass it on.
+            throw new AiException(AiException.Kind.BAD_KEY, "invalid characters in the API key");
+        }
         if ("http".equalsIgnoreCase(endpoint.getScheme())) {
             request.version(HttpClient.Version.HTTP_1_1); // local servers: no h2c upgrade attempt
         }
         try {
-            HttpResponse<String> response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
-            return new Response(response.statusCode(), response.body());
+            HttpResponse<InputStream> response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
+            try (InputStream body = response.body()) {
+                byte[] bytes = body.readNBytes(MAX_BODY_BYTES + 1);
+                if (bytes.length > MAX_BODY_BYTES) {
+                    throw new AiException(AiException.Kind.BAD_RESPONSE, "response larger than 2 MB");
+                }
+                return new Response(response.statusCode(), new String(bytes, StandardCharsets.UTF_8));
+            }
         } catch (IOException e) {
             throw new AiException(AiException.Kind.NETWORK, e.getClass().getSimpleName(), e);
         } catch (InterruptedException e) {

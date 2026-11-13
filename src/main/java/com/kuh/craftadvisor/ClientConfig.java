@@ -52,7 +52,8 @@ public final class ClientConfig {
             .define("shareHistory", true);
 
     public static final ModConfigSpec.ConfigValue<String> CONSENTED_HOST = BUILDER
-            .comment("AI host you agreed to send requests to (set by /ai consent). Empty or a different host asks again.")
+            .comment("AI host you agreed to send requests to, with a short fingerprint of your key (set by /ai consent)."
+                    + " A different host or key asks again.")
             .define("consentedHost", "");
 
     static final ModConfigSpec SPEC = BUILDER.build();

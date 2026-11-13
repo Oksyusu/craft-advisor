@@ -2,6 +2,10 @@ package com.kuh.craftadvisor.ai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.net.URI;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -39,5 +43,16 @@ class AiHttpTest {
     void plainStringErrorsAndOtherBodiesAreRead() {
         assertEquals("model \"x\" not found", AiHttp.errorOf(404, "{\"error\":\"model \\\"x\\\" not found\"}", "", false).getMessage());
         assertEquals("HTTP 502", AiHttp.errorOf(502, "<html>bad gateway</html>", "", false).getMessage());
+    }
+
+    @Test
+    void aKeyWithControlCharactersFailsBeforeSendingWithoutQuotingIt() {
+        Map<String, String> headers = Map.of("authorization", "Bearer " + KEY + "\u0001");
+
+        AiException error = assertThrows(AiException.class,
+                () -> AiHttp.JDK.post(URI.create("https://localhost:1/v1"), headers, "{}"));
+
+        assertEquals(AiException.Kind.BAD_KEY, error.kind());
+        assertFalse(error.getMessage().contains("sk-test"));
     }
 }
