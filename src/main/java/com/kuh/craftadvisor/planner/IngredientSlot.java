@@ -4,7 +4,8 @@ import java.util.List;
 
 /**
  * One input slot of a recipe. Any of the alternatives satisfies it (tags such as "any planks").
- * The first alternative is the one JEI displays first and the one expanded when none is owned.
+ * The first alternative is the one JEI displays first; {@link CraftPlanner} decides which one to expand.
+ * {@code count} is in the ingredient's own unit (mB for fluids).
  */
 public record IngredientSlot(List<IngredientKey> alternatives, int count) {
     public IngredientSlot {
@@ -19,9 +20,5 @@ public record IngredientSlot(List<IngredientKey> alternatives, int count) {
 
     public static IngredientSlot of(String id, int count) {
         return new IngredientSlot(List.of(IngredientKey.item(id)), count);
-    }
-
-    public IngredientKey primary() {
-        return alternatives.get(0);
     }
 }

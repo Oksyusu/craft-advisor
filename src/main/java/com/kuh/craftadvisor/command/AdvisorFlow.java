@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 
 import com.google.gson.Gson;
 import com.kuh.craftadvisor.ClientConfig;
+import com.kuh.craftadvisor.RecipePreferencesFile;
 import com.kuh.craftadvisor.ai.AiException;
 import com.kuh.craftadvisor.ai.AiProvider;
 import com.kuh.craftadvisor.ai.ClaudeProvider;
@@ -90,8 +91,9 @@ final class AdvisorFlow {
             ChatOut.error("craftadvisor.msg.unknown_item", target.uid());
             return;
         }
-        Map<IngredientKey, Integer> inventory = Items.countAll(minecraft.player.getInventory());
-        CraftPlan plan = new CraftPlanner(new JeiRecipeSource(runtime)).plan(target, TARGET_AMOUNT, inventory);
+        Map<IngredientKey, Integer> inventory = Items.countAll(runtime.getIngredientManager(), minecraft.player.getInventory());
+        CraftPlan plan = new CraftPlanner(new JeiRecipeSource(runtime), RecipePreferencesFile.load())
+                .plan(target, TARGET_AMOUNT, inventory);
 
         runtime.getRecipesGui().show(runtime.getJeiHelpers().getFocusFactory()
                 .createFocus(RecipeIngredientRole.OUTPUT, VanillaTypes.ITEM_STACK, stack));
@@ -155,21 +157,34 @@ final class AdvisorFlow {
                         .toList(),
                 "missing", plan.missing().stream()
                         .map(m -> Map.of("item", name(m.item()), "count", m.count(),
+                                "unit", IngredientKey.FLUID.equals(m.item().kind()) ? "mB" : "items",
                                 "reason", m.reason().name().toLowerCase(java.util.Locale.ROOT)))
-                        .toList());
+                        .toList(),
+                "choices", plan.choices().stream().map(AdvisorFlow::choiceJson).toList());
         return GSON.toJson(json);
     }
 
+    private static Map<String, Object> choiceJson(CraftPlan.Choice choice) {
+        String reason = choice.reason().name().toLowerCase(java.util.Locale.ROOT);
+        if (choice.isRecipe()) {
+            return Map.of("item", name(choice.chosen()), "recipeRule", choice.recipeCategory(),
+                    "usableRecipes", choice.alternativeCount(), "reason", reason);
+        }
+        return Map.of("slotOf", name(choice.slotOwner()), "chosen", name(choice.chosen()),
+                "alternatives", choice.alternativeCount(), "reason", reason);
+    }
+
     private static String name(IngredientKey key) {
-        return Items.nameOf(key).getString() + " (" + key.uid() + ")";
+        return Items.nameOf(key).getString() + " (" + key + ")";
     }
 
     private static String inventorySummary() {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null) {
+        Optional<IJeiRuntime> runtime = CraftAdvisorJeiPlugin.runtime();
+        if (minecraft.player == null || runtime.isEmpty()) {
             return "unknown";
         }
-        return Items.countAll(minecraft.player.getInventory()).entrySet().stream()
+        return Items.countAll(runtime.get().getIngredientManager(), minecraft.player.getInventory()).entrySet().stream()
                 .sorted(Map.Entry.<IngredientKey, Integer>comparingByValue(Comparator.reverseOrder()))
                 .limit(INVENTORY_SUMMARY_ITEMS)
                 .map(e -> Items.nameOf(e.getKey()).getString() + " x" + e.getValue())

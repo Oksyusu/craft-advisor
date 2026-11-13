@@ -31,5 +31,6 @@ public class CraftAdvisorJeiPlugin implements IModPlugin {
     @Override
     public void onRuntimeUnavailable() {
         runtime = null;
+        Items.forget();
     }
 }

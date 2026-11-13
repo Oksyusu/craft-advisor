@@ -35,7 +35,7 @@ public final class ItemCandidates {
         String normalized = query.trim().toLowerCase(Locale.ROOT);
         Map<IngredientKey, Candidate> all = new LinkedHashMap<>();
         for (ItemStack stack : runtime.getIngredientManager().getAllItemStacks()) {
-            IngredientKey key = Items.keyOf(stack);
+            IngredientKey key = Items.keyOf(runtime.getIngredientManager(), stack);
             all.putIfAbsent(key, new Candidate(key, stack.getHoverName().getString()));
         }
 

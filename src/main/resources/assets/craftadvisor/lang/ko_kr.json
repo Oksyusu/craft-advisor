@@ -32,5 +32,19 @@
   "craftadvisor.ai.refused": "Claude가 이 요청에 답하지 않았습니다.",
   "craftadvisor.ai.bad_request": "요청이 거부되었습니다: %s",
   "craftadvisor.ai.network": "Claude API에 연결하지 못했습니다 (%s).",
-  "craftadvisor.ai.bad_response": "Claude의 답을 읽지 못했습니다 (%s)."
+  "craftadvisor.ai.bad_response": "Claude의 답을 읽지 못했습니다 (%s).",
+
+  "craftadvisor.msg.missing_line_fluid": " - %s %s mB%s",
+  "craftadvisor.msg.choices_header": "고른 대안:",
+  "craftadvisor.msg.choice_slot.owned": " - %s (대안 %s종 중 가진 것)",
+  "craftadvisor.msg.choice_slot.rule": " - %s (대안 %s종 중 규칙)",
+  "craftadvisor.msg.choice_slot.default": " - %s (대안 %s종 중 첫 번째)",
+  "craftadvisor.msg.choice_recipe.rule": " - %s: %s 레시피 (규칙)",
+  "craftadvisor.msg.choice_recipe.rule_unusable": " - %s: %s 레시피를 쓸 수 없어 기본 선택",
+  "craftadvisor.msg.choices_hint": "규칙 파일로 바꿀 수 있음: %s",
+  "craftadvisor.msg.rules_bad_line": "레시피 선호 규칙 파일 %s번째 줄을 건너뜀: %s",
+  "craftadvisor.msg.rules_unreadable": "%s 파일을 읽지 못했습니다.",
+  "craftadvisor.rules.unknown_command": "모르는 명령 (recipe 또는 prefer)",
+  "craftadvisor.rules.wrong_argument_count": "인자 개수가 맞지 않음",
+  "craftadvisor.rules.bad_id": "ID에 이름공간이 필요함 (예: minecraft:spruce_planks)"
 }

@@ -6,16 +6,20 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
  * Expands a target item into a crafting tree using deterministic rules, so the numbers never
  * come from the AI:
  * <ul>
- *   <li>Recipe choice: the recipe with the most input slots the inventory already covers; ties keep JEI order.
+ *   <li>Recipe choice: a {@code recipe} rule's category if such a recipe is usable; then the recipe with the most
+ *       input slots the inventory already covers; ties keep JEI order.
  *       Recipes that use an item on the current path are skipped (e.g. iron block back into iron ingots).</li>
- *   <li>A slot is satisfied by any of its alternatives; otherwise its first alternative is expanded.</li>
- *   <li>Expansion stops at items with no recipe, items that only loop back, and at {@link #MAX_DEPTH}.</li>
+ *   <li>A slot is satisfied by any of its alternatives. What is still short is expanded from an alternative the
+ *       inventory has some of, else the first {@code prefer} rule that lists one, else the first alternative.</li>
+ *   <li>Expansion stops at items with no recipe, items that only loop back, and at {@link #MAX_DEPTH}.
+ *       Non-item ingredients (fluids, ...) are never expanded nor taken from the inventory.</li>
  *   <li>Crafts are rounded up by the recipe's output count; leftovers are reused by later slots.</li>
  * </ul>
  * The caller's inventory map is never modified.
@@ -24,17 +28,30 @@ public final class CraftPlanner {
     public static final int MAX_DEPTH = 8;
 
     private final RecipeSource recipes;
+    private final RecipePreferences preferences;
 
     public CraftPlanner(RecipeSource recipes) {
+        this(recipes, RecipePreferences.NONE);
+    }
+
+    public CraftPlanner(RecipeSource recipes, RecipePreferences preferences) {
         this.recipes = recipes;
+        this.preferences = preferences;
     }
 
     public CraftPlan plan(IngredientKey target, int amount, Map<IngredientKey, Integer> inventory) {
-        Run run = new Run(new HashMap<>(inventory));
+        Map<IngredientKey, Integer> pool = new HashMap<>();
+        inventory.forEach((key, count) -> {
+            if (key.isItem()) {
+                pool.put(key, count); // non-items are never taken from the inventory
+            }
+        });
+        Run run = new Run(pool);
         run.craft(target, amount, 0, List.of());
         List<CraftPlan.Missing> missing = new ArrayList<>();
         run.missing.forEach((item, count) -> missing.add(new CraftPlan.Missing(item, count, run.reasons.get(item))));
-        return new CraftPlan(target, amount, run.steps, missing, new ArrayList<>(run.machines));
+        return new CraftPlan(target, amount, run.steps, missing, new ArrayList<>(run.machines),
+                new ArrayList<>(run.choices));
     }
 
     /** Mutable working state of one planning call. */
@@ -44,6 +61,7 @@ public final class CraftPlanner {
         private final Map<IngredientKey, Integer> missing = new LinkedHashMap<>();
         private final Map<IngredientKey, CraftPlan.StopReason> reasons = new HashMap<>();
         private final Set<IngredientKey> machines = new LinkedHashSet<>();
+        private final Set<CraftPlan.Choice> choices = new LinkedHashSet<>();
 
         private Run(Map<IngredientKey, Integer> pool) {
             this.pool = pool;
@@ -64,7 +82,7 @@ public final class CraftPlanner {
                 addMissing(item, needed, hasAny ? CraftPlan.StopReason.CYCLE : CraftPlan.StopReason.NO_RECIPE);
                 return;
             }
-            RecipeOption recipe = choose(usable);
+            RecipeOption recipe = chooseRecipe(item, usable);
             int crafts = ceilDiv(needed, recipe.outputCount());
             steps.add(new CraftPlan.Step(item, crafts, depth, recipe));
             machines.addAll(recipe.machines());
@@ -73,19 +91,54 @@ public final class CraftPlanner {
                 pool.merge(item, leftover, Integer::sum);
             }
             for (IngredientSlot slot : recipe.inputs()) {
+                CraftPlan.Choice choice = chooseAlternative(item, slot); // before taking, so "owned" is still visible
                 int remaining = takeFromPool(slot, slot.count() * crafts);
                 if (remaining > 0) {
-                    obtain(slot.primary(), remaining, depth + 1, nextPath);
+                    if (slot.alternatives().size() > 1) {
+                        choices.add(choice);
+                    }
+                    obtain(choice.chosen(), remaining, depth + 1, nextPath);
                 }
             }
         }
 
         /** Ingredients below the target: use what the pool still has, craft the rest. */
         private void obtain(IngredientKey item, int needed, int depth, List<IngredientKey> path) {
+            if (!item.isItem()) {
+                addMissing(item, needed, CraftPlan.StopReason.NOT_ITEM);
+                return;
+            }
             int remaining = take(item, needed);
             if (remaining > 0) {
                 craft(item, remaining, depth, path);
             }
+        }
+
+        /** A recipe rule narrows the choice to its category; if nothing usable is left, it is ignored and noted. */
+        private RecipeOption chooseRecipe(IngredientKey item, List<RecipeOption> usable) {
+            Optional<String> category = preferences.recipeCategory(item);
+            if (category.isEmpty()) {
+                return choose(usable);
+            }
+            List<RecipeOption> ruled = usable.stream().filter(r -> r.category().equals(category.get())).toList();
+            CraftPlan.ChoiceReason reason = ruled.isEmpty()
+                    ? CraftPlan.ChoiceReason.RULE_UNUSABLE
+                    : CraftPlan.ChoiceReason.RULE;
+            choices.add(new CraftPlan.Choice(item, item, usable.size(), reason, category.get()));
+            return choose(ruled.isEmpty() ? usable : ruled);
+        }
+
+        private CraftPlan.Choice chooseAlternative(IngredientKey owner, IngredientSlot slot) {
+            List<IngredientKey> alternatives = slot.alternatives();
+            Optional<IngredientKey> owned = alternatives.stream().filter(alt -> pool.getOrDefault(alt, 0) > 0).findFirst();
+            if (owned.isPresent()) {
+                return slotChoice(owner, owned.get(), slot, CraftPlan.ChoiceReason.OWNED);
+            }
+            Optional<IngredientKey> preferred = preferences.preferred().stream().filter(alternatives::contains).findFirst();
+            if (preferred.isPresent()) {
+                return slotChoice(owner, preferred.get(), slot, CraftPlan.ChoiceReason.RULE);
+            }
+            return slotChoice(owner, alternatives.get(0), slot, CraftPlan.ChoiceReason.DEFAULT);
         }
 
         private RecipeOption choose(List<RecipeOption> options) {
@@ -136,6 +189,11 @@ public final class CraftPlanner {
             missing.merge(item, count, Integer::sum);
             reasons.putIfAbsent(item, reason);
         }
+    }
+
+    private static CraftPlan.Choice slotChoice(IngredientKey owner, IngredientKey chosen, IngredientSlot slot,
+                                               CraftPlan.ChoiceReason reason) {
+        return new CraftPlan.Choice(owner, chosen, slot.alternatives().size(), reason, "");
     }
 
     private static List<IngredientKey> append(List<IngredientKey> path, IngredientKey item) {

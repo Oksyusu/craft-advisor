@@ -11,6 +11,8 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import com.kuh.craftadvisor.planner.CraftPlan.Choice;
+import com.kuh.craftadvisor.planner.CraftPlan.ChoiceReason;
 import com.kuh.craftadvisor.planner.CraftPlan.Missing;
 import com.kuh.craftadvisor.planner.CraftPlan.StopReason;
 
@@ -18,11 +20,17 @@ class CraftPlannerTest {
 
     /** Small hand-written recipe book standing in for JEI. */
     private static final class Book implements RecipeSource {
+        private static final String CRAFTING = "minecraft:crafting";
         private final Map<IngredientKey, List<RecipeOption>> recipes = new HashMap<>();
 
         Book add(String output, int outputCount, List<String> machines, IngredientSlot... inputs) {
+            return addIn(CRAFTING, output, outputCount, machines, inputs);
+        }
+
+        Book addIn(String category, String output, int outputCount, List<String> machines, IngredientSlot... inputs) {
             recipes.computeIfAbsent(IngredientKey.item(output), k -> new ArrayList<>())
-                    .add(new RecipeOption(List.of(inputs), outputCount, machines.stream().map(IngredientKey::item).toList()));
+                    .add(new RecipeOption(List.of(inputs), outputCount,
+                            machines.stream().map(IngredientKey::item).toList(), category));
             return this;
         }
 
@@ -54,6 +62,16 @@ class CraftPlannerTest {
 
     private static Missing missing(String id, int count, StopReason reason) {
         return new Missing(IngredientKey.item(id), count, reason);
+    }
+
+    private static IngredientKey fluid(String uid) {
+        return new IngredientKey(IngredientKey.FLUID, uid);
+    }
+
+    private static RecipePreferences rules(String... lines) {
+        RecipePreferences.Parsed parsed = RecipePreferences.parse(List.of(lines));
+        assertEquals(List.of(), parsed.problems());
+        return parsed.preferences();
     }
 
     private static Book vanillaPiston() {
@@ -187,5 +205,100 @@ class CraftPlannerTest {
 
         assertEquals(4, plan.missing().size());
         assertEquals(inv("minecraft:piston", 5), inventory);
+    }
+
+    @Test
+    void variantsWithTheSameRegistryIdAreCountedSeparately() {
+        String healing = "minecraft:potion:minecraft:healing";
+        String swiftness = "minecraft:potion:minecraft:swiftness";
+        Book book = new Book().add("test:kit", 1, slot(healing, 1), slot(swiftness, 1));
+
+        CraftPlan owned = new CraftPlanner(book).plan(IngredientKey.item("test:kit"), 1, inv(healing, 2));
+        CraftPlan empty = new CraftPlanner(book).plan(IngredientKey.item("test:kit"), 1, Map.of());
+
+        assertEquals(List.of(missing(swiftness, 1, StopReason.NO_RECIPE)), owned.missing());
+        assertEquals(List.of(
+                missing(healing, 1, StopReason.NO_RECIPE),
+                missing(swiftness, 1, StopReason.NO_RECIPE)), empty.missing());
+    }
+
+    @Test
+    void fluidInputIsMissingAsNotItemWithItsAmount() {
+        Book book = new Book().addIn("create:mixing", "test:slurry", 1, List.of("create:mechanical_mixer"),
+                new IngredientSlot(List.of(fluid("minecraft:water")), 250), slot("minecraft:clay_ball", 1));
+        Map<IngredientKey, Integer> inventory = new HashMap<>(inv("minecraft:clay_ball", 2));
+        inventory.put(fluid("minecraft:water"), 1000); // fluids are never taken from the inventory
+
+        CraftPlan plan = new CraftPlanner(book).plan(IngredientKey.item("test:slurry"), 2, inventory);
+
+        assertEquals(List.of(new Missing(fluid("minecraft:water"), 500, StopReason.NOT_ITEM)), plan.missing());
+    }
+
+    @Test
+    void recipeRuleBeatsInventoryCoverage() {
+        Book book = new Book()
+                .add("create:andesite_alloy", 2, slot("minecraft:andesite", 2), slot("minecraft:iron_nugget", 2))
+                .addIn("create:mixing", "create:andesite_alloy", 2, List.of("create:mechanical_mixer"),
+                        slot("minecraft:andesite", 2), slot("create:zinc_nugget", 2));
+        IngredientKey alloy = IngredientKey.item("create:andesite_alloy");
+
+        CraftPlan plan = new CraftPlanner(book, rules("recipe create:andesite_alloy create:mixing"))
+                .plan(alloy, 2, inv("minecraft:andesite", 2, "minecraft:iron_nugget", 2));
+
+        assertEquals("create:mixing", plan.steps().get(0).recipe().category());
+        assertEquals(List.of(missing("create:zinc_nugget", 2, StopReason.NO_RECIPE)), plan.missing());
+        assertEquals(List.of(new Choice(alloy, alloy, 2, ChoiceReason.RULE, "create:mixing")), plan.choices());
+    }
+
+    @Test
+    void recipeRuleThatLoopsFallsBackToDefaultAndIsNoted() {
+        Book book = new Book()
+                .add("test:a", 1, slot("test:b", 1))
+                .addIn("create:mixing", "test:a", 1, List.of(), slot("test:a", 1), slot("test:c", 1));
+        IngredientKey a = IngredientKey.item("test:a");
+
+        CraftPlan plan = new CraftPlanner(book, rules("recipe test:a create:mixing")).plan(a, 1, Map.of());
+
+        assertEquals("minecraft:crafting", plan.steps().get(0).recipe().category());
+        assertEquals(List.of(missing("test:b", 1, StopReason.NO_RECIPE)), plan.missing());
+        assertEquals(List.of(new Choice(a, a, 1, ChoiceReason.RULE_UNUSABLE, "create:mixing")), plan.choices());
+    }
+
+    private static Book planksBox() {
+        return new Book()
+                .add("test:box", 1, anyOf(3, "minecraft:oak_planks", "minecraft:spruce_planks", "minecraft:birch_planks"))
+                .add("minecraft:oak_planks", 4, slot("minecraft:oak_log", 1))
+                .add("minecraft:spruce_planks", 4, slot("minecraft:spruce_log", 1))
+                .add("minecraft:birch_planks", 4, slot("minecraft:birch_log", 1));
+    }
+
+    private static Choice plankChoice(String chosen, ChoiceReason reason) {
+        return new Choice(IngredientKey.item("test:box"), IngredientKey.item(chosen), 3, reason, "");
+    }
+
+    @Test
+    void preferRuleBeatsFirstAlternative() {
+        CraftPlan plan = new CraftPlanner(planksBox(), rules("prefer minecraft:birch_planks"))
+                .plan(IngredientKey.item("test:box"), 1, Map.of());
+
+        assertEquals(List.of(missing("minecraft:birch_log", 1, StopReason.NO_RECIPE)), plan.missing());
+        assertEquals(List.of(plankChoice("minecraft:birch_planks", ChoiceReason.RULE)), plan.choices());
+    }
+
+    @Test
+    void ownedAlternativeBeatsPreferRule() {
+        CraftPlan plan = new CraftPlanner(planksBox(), rules("prefer minecraft:birch_planks"))
+                .plan(IngredientKey.item("test:box"), 1, inv("minecraft:spruce_planks", 1));
+
+        assertEquals(List.of(missing("minecraft:spruce_log", 1, StopReason.NO_RECIPE)), plan.missing());
+        assertEquals(List.of(plankChoice("minecraft:spruce_planks", ChoiceReason.OWNED)), plan.choices());
+    }
+
+    @Test
+    void withoutRulesTheFirstAlternativeIsExpandedAndNoted() {
+        CraftPlan plan = new CraftPlanner(planksBox()).plan(IngredientKey.item("test:box"), 1, Map.of());
+
+        assertEquals(List.of(missing("minecraft:oak_log", 1, StopReason.NO_RECIPE)), plan.missing());
+        assertEquals(List.of(plankChoice("minecraft:oak_planks", ChoiceReason.DEFAULT)), plan.choices());
     }
 }

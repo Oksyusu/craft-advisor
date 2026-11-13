@@ -1,9 +1,12 @@
 package com.kuh.craftadvisor.chat;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
+import com.kuh.craftadvisor.RecipePreferencesFile;
 import com.kuh.craftadvisor.jei.Items;
+import com.kuh.craftadvisor.jei.JeiRecipeSource;
 import com.kuh.craftadvisor.planner.CraftPlan;
 import com.kuh.craftadvisor.planner.IngredientKey;
 
@@ -14,6 +17,8 @@ import net.minecraft.network.chat.MutableComponent;
 
 /** Local chat output only; nothing here is sent to the server. Call on the client thread. */
 public final class ChatOut {
+    private static final int MAX_CHOICE_LINES = 5;
+
     private ChatOut() {
     }
 
@@ -44,9 +49,42 @@ public final class ChatOut {
         }
         info("craftadvisor.msg.missing_header");
         for (CraftPlan.Missing missing : plan.missing()) {
-            send(Component.translatable("craftadvisor.msg.missing_line",
+            String line = isFluid(missing.item()) ? "craftadvisor.msg.missing_line_fluid" : "craftadvisor.msg.missing_line";
+            send(Component.translatable(line,
                     Items.nameOf(missing.item()), missing.count(), reasonSuffix(missing.reason())));
         }
+        choices(plan.choices());
+    }
+
+    /** Amount with its unit for plain text: "x4" for items, "1000 mB" for fluids. */
+    public static String amountText(IngredientKey item, int count) {
+        return isFluid(item) ? count + " mB" : "x" + count;
+    }
+
+    private static boolean isFluid(IngredientKey item) {
+        return IngredientKey.FLUID.equals(item.kind());
+    }
+
+    private static void choices(List<CraftPlan.Choice> choices) {
+        if (choices.isEmpty()) {
+            return;
+        }
+        info("craftadvisor.msg.choices_header");
+        choices.stream().map(ChatOut::choiceLine).distinct().limit(MAX_CHOICE_LINES).forEach(ChatOut::send);
+        if (choices.stream().anyMatch(choice -> choice.reason() == CraftPlan.ChoiceReason.DEFAULT)) {
+            send(Component.translatable("craftadvisor.msg.choices_hint", RecipePreferencesFile.DISPLAY_PATH)
+                    .withStyle(ChatFormatting.GRAY));
+        }
+    }
+
+    private static Component choiceLine(CraftPlan.Choice choice) {
+        String reason = choice.reason().name().toLowerCase(Locale.ROOT);
+        if (choice.isRecipe()) {
+            return Component.translatable("craftadvisor.msg.choice_recipe." + reason,
+                    Items.nameOf(choice.chosen()), JeiRecipeSource.categoryName(choice.recipeCategory()));
+        }
+        return Component.translatable("craftadvisor.msg.choice_slot." + reason,
+                Items.nameOf(choice.chosen()), choice.alternativeCount());
     }
 
     public static Component reasonSuffix(CraftPlan.StopReason reason) {
@@ -54,6 +92,7 @@ public final class ChatOut {
             case NO_RECIPE -> Component.empty();
             case CYCLE -> Component.translatable("craftadvisor.reason.cycle").withStyle(ChatFormatting.GRAY);
             case MAX_DEPTH -> Component.translatable("craftadvisor.reason.max_depth").withStyle(ChatFormatting.GRAY);
+            case NOT_ITEM -> Component.empty();
         };
     }
 

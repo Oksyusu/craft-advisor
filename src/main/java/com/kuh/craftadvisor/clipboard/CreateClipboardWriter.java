@@ -6,7 +6,6 @@ import java.util.List;
 import com.kuh.craftadvisor.chat.ChatOut;
 import com.kuh.craftadvisor.jei.Items;
 import com.kuh.craftadvisor.planner.CraftPlan;
-import com.kuh.craftadvisor.planner.IngredientKey;
 import com.simibubi.create.AllDataComponents;
 import com.simibubi.create.content.equipment.clipboard.ClipboardContent;
 import com.simibubi.create.content.equipment.clipboard.ClipboardEditPacket;
@@ -14,7 +13,9 @@ import com.simibubi.create.content.equipment.clipboard.ClipboardEntry;
 import com.simibubi.create.content.equipment.clipboard.ClipboardOverrides.ClipboardType;
 
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -27,11 +28,11 @@ final class CreateClipboardWriter {
     private CreateClipboardWriter() {
     }
 
-    private static final IngredientKey CLIPBOARD = IngredientKey.item("create:clipboard");
+    private static final ResourceLocation CLIPBOARD = ResourceLocation.fromNamespaceAndPath("create", "clipboard");
 
     static boolean isHoldingClipboard(LocalPlayer player) {
         ItemStack held = player.getMainHandItem();
-        return !held.isEmpty() && Items.keyOf(held).equals(CLIPBOARD);
+        return !held.isEmpty() && BuiltInRegistries.ITEM.getKey(held.getItem()).equals(CLIPBOARD);
     }
 
     static void write(LocalPlayer player, CraftPlan plan) {
@@ -70,7 +71,7 @@ final class CreateClipboardWriter {
     private static List<Line> lines(CraftPlan plan) {
         return plan.missing().stream()
                 .map(m -> {
-                    String text = Items.nameOf(m.item()).getString() + " x" + m.count()
+                    String text = Items.nameOf(m.item()).getString() + " " + ChatOut.amountText(m.item(), m.count())
                             + ChatOut.reasonSuffix(m.reason()).getString();
                     return new Line(text, Items.stackOf(m.item()).orElse(ItemStack.EMPTY), m.count());
                 })
