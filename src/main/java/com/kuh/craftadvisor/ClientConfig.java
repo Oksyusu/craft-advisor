@@ -22,6 +22,18 @@ public final class ClientConfig {
             .comment("Maximum tokens for an advice or free-question answer.")
             .defineInRange("adviceMaxTokens", 2000, 256, 16000);
 
+    public static final ModConfigSpec.BooleanValue SHARE_INVENTORY = BUILDER
+            .comment("Send an inventory summary with free questions. When false, advice gets total amounts instead of what is missing.")
+            .define("shareInventory", true);
+
+    public static final ModConfigSpec.BooleanValue SHARE_HISTORY = BUILDER
+            .comment("Send the recent /ai conversation with free questions.")
+            .define("shareHistory", true);
+
+    public static final ModConfigSpec.ConfigValue<String> CONSENTED_HOST = BUILDER
+            .comment("AI host you agreed to send requests to (set by /ai consent). Empty or a different host asks again.")
+            .define("consentedHost", "");
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     private ClientConfig() {

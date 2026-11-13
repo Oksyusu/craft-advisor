@@ -46,5 +46,32 @@
   "craftadvisor.msg.rules_unreadable": "Could not read %s",
   "craftadvisor.rules.unknown_command": "unknown command (use recipe or prefer)",
   "craftadvisor.rules.wrong_argument_count": "wrong number of arguments",
-  "craftadvisor.rules.bad_id": "ids need a namespace, e.g. minecraft:spruce_planks"
+  "craftadvisor.rules.bad_id": "ids need a namespace, e.g. minecraft:spruce_planks",
+
+  "craftadvisor.configuration.shareInventory": "Share Inventory with AI",
+  "craftadvisor.configuration.shareHistory": "Share Recent Conversation with AI",
+  "craftadvisor.configuration.consentedHost": "Agreed AI Host",
+
+  "craftadvisor.help.usage": "/ai <item or question>: materials, JEI recipe and AI advice",
+  "craftadvisor.help.preview": "/ai preview <question>: show what would be sent to the AI, without sending",
+  "craftadvisor.help.consent": "/ai consent: agree to send requests to the AI and continue the held question",
+
+  "craftadvisor.consent.header": "AI requests go to %s. Nothing has been sent yet.",
+  "craftadvisor.consent.sends": "Sent: your question, JEI item candidates, the plan computed by code.",
+  "craftadvisor.consent.sends_inventory": "Also sent: an inventory summary (turn off with shareInventory).",
+  "craftadvisor.consent.sends_history": "Also sent: your recent /ai conversation (turn off with shareHistory).",
+  "craftadvisor.consent.not_sent": "Never sent: player name, server address, coordinates, chat, renamed item names.",
+  "craftadvisor.consent.config": "Settings: config/craftadvisor-client.toml",
+  "craftadvisor.consent.how": "Type /ai consent to agree and continue, or /ai preview <question> to see the exact content first.",
+  "craftadvisor.consent.saved": "Consent saved for %s.",
+
+  "craftadvisor.preview.header": "Preview, nothing sent. Route: %s",
+  "craftadvisor.preview.route.pick": "pick an item",
+  "craftadvisor.preview.route.advice": "advice on the plan",
+  "craftadvisor.preview.route.chat": "free question",
+  "craftadvisor.preview.exact_only": "Preview: ends with the exact item search. Nothing is sent to the AI.",
+  "craftadvisor.preview.target": "To: %s, model %s",
+  "craftadvisor.preview.history": "Earlier conversation: %s turns, %s chars",
+  "craftadvisor.preview.section": "[%s] %s chars",
+  "craftadvisor.preview.line": "  %s"
 }

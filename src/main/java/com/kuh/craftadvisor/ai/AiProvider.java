@@ -1,6 +1,5 @@
 package com.kuh.craftadvisor.ai;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -9,14 +8,11 @@ import java.util.concurrent.CompletableFuture;
  */
 public interface AiProvider {
 
-    /** Decide whether the request names an item to craft, choosing only from {@code candidateLines}. */
-    CompletableFuture<ItemPick> pickItem(String request, List<String> candidateLines);
+    /** Decide whether the request names an item to craft, choosing only from the candidates ({@link OutgoingRequest.Route#PICK}). */
+    CompletableFuture<ItemPick> pickItem(OutgoingRequest request);
 
-    /** Short advice for a plan computed by code ({@code planJson}); must not invent numbers. */
-    CompletableFuture<String> advise(String request, String planJson);
-
-    /** Free question with recent conversation and an inventory summary as context. */
-    CompletableFuture<String> chat(List<Turn> history, String question, String inventorySummary);
+    /** Advice on a plan computed by code, which must not invent numbers, or a free question with context. */
+    CompletableFuture<String> answer(OutgoingRequest request);
 
     record Turn(boolean fromPlayer, String text) {
     }

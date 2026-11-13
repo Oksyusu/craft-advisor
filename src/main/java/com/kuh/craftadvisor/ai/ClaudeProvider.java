@@ -26,6 +26,8 @@ import com.kuh.craftadvisor.CraftAdvisor;
  */
 public final class ClaudeProvider implements AiProvider {
     private static final URI ENDPOINT = URI.create("https://api.anthropic.com/v1/messages");
+    /** Where requests go; shown in the consent notice and the preview. */
+    public static final String HOST = ENDPOINT.getHost();
     private static final String API_VERSION = "2026-10-21";
     private static final String FALLBACK_BETA = "server-side-fallback-2026-07-01";
     /** Models documented to accept server-side refusal fallbacks. */
@@ -57,11 +59,8 @@ public final class ClaudeProvider implements AiProvider {
     }
 
     @Override
-    public CompletableFuture<ItemPick> pickItem(String request, List<String> candidateLines) {
-        String user = "Request: " + request + "\nCandidates (id | name):\n" + String.join("\n", candidateLines);
-        JsonObject body = baseBody(Prompts.PICK, PICK_MAX_TOKENS, "low", messages(List.of(), user));
-        body.getAsJsonObject("output_config").add("format", pickSchema());
-        return send(body).thenApply(text -> {
+    public CompletableFuture<ItemPick> pickItem(OutgoingRequest request) {
+        return send(request).thenApply(text -> {
             try {
                 return GSON.fromJson(text, ItemPick.class);
             } catch (JsonParseException e) {
@@ -71,15 +70,23 @@ public final class ClaudeProvider implements AiProvider {
     }
 
     @Override
-    public CompletableFuture<String> advise(String request, String planJson) {
-        String user = "Player request: " + request + "\nPlan computed by code:\n" + planJson;
-        return send(baseBody(Prompts.ADVICE, answerMaxTokens, "medium", messages(List.of(), user)));
+    public CompletableFuture<String> answer(OutgoingRequest request) {
+        return send(request);
     }
 
-    @Override
-    public CompletableFuture<String> chat(List<Turn> history, String question, String inventorySummary) {
-        String user = question + "\n\n(Inventory: " + inventorySummary + ")";
-        return send(baseBody(Prompts.CHAT, answerMaxTokens, "medium", messages(history, user)));
+    /** The JSON body for {@code request}; the API key goes only in a header, never here. */
+    String body(OutgoingRequest request) {
+        JsonArray messages = messages(request.history(), request.userText());
+        JsonObject body = switch (request.route()) {
+            case PICK -> {
+                JsonObject pick = baseBody(Prompts.PICK, PICK_MAX_TOKENS, "low", messages);
+                pick.getAsJsonObject("output_config").add("format", pickSchema());
+                yield pick;
+            }
+            case ADVICE -> baseBody(Prompts.ADVICE, answerMaxTokens, "medium", messages);
+            case CHAT -> baseBody(Prompts.CHAT, answerMaxTokens, "medium", messages);
+        };
+        return GSON.toJson(body);
     }
 
     private JsonObject baseBody(String system, int maxTokens, String effort, JsonArray messages) {
@@ -131,11 +138,12 @@ public final class ClaudeProvider implements AiProvider {
         return JsonParser.parseString(schema).getAsJsonObject();
     }
 
-    private CompletableFuture<String> send(JsonObject body) {
+    private CompletableFuture<String> send(OutgoingRequest request) {
         if (apiKey == null || apiKey.isBlank()) {
             return CompletableFuture.failedFuture(new AiException(AiException.Kind.NO_KEY, "no API key"));
         }
-        return CompletableFuture.supplyAsync(() -> sendWithRetry(GSON.toJson(body)), EXECUTOR);
+        String json = body(request);
+        return CompletableFuture.supplyAsync(() -> sendWithRetry(json), EXECUTOR);
     }
 
     private String sendWithRetry(String json) {
