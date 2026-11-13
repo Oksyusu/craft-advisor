@@ -8,7 +8,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
-import com.kuh.craftadvisor.planner.ItemKey;
+import com.kuh.craftadvisor.planner.IngredientKey;
 
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.world.item.ItemStack;
@@ -22,7 +22,7 @@ public final class ItemCandidates {
     private static final int NAME_IN_QUERY_SCORE = 100;
     private static final int TOKEN_HIT_SCORE = 10;
 
-    public record Candidate(ItemKey key, String name) {
+    public record Candidate(IngredientKey key, String name) {
     }
 
     public record Result(List<Candidate> candidates, Optional<Candidate> exact) {
@@ -33,14 +33,14 @@ public final class ItemCandidates {
 
     public static Result find(IJeiRuntime runtime, String query, int limit) {
         String normalized = query.trim().toLowerCase(Locale.ROOT);
-        Map<ItemKey, Candidate> all = new LinkedHashMap<>();
+        Map<IngredientKey, Candidate> all = new LinkedHashMap<>();
         for (ItemStack stack : runtime.getIngredientManager().getAllItemStacks()) {
-            ItemKey key = Items.keyOf(stack);
+            IngredientKey key = Items.keyOf(stack);
             all.putIfAbsent(key, new Candidate(key, stack.getHoverName().getString()));
         }
 
         Optional<Candidate> exact = all.values().stream()
-                .filter(c -> c.key().id().equalsIgnoreCase(normalized) || c.name().equalsIgnoreCase(normalized))
+                .filter(c -> c.key().uid().equalsIgnoreCase(normalized) || c.name().equalsIgnoreCase(normalized))
                 .findFirst();
 
         List<String> tokens = List.of(normalized.split("\\s+")).stream()
@@ -67,7 +67,7 @@ public final class ItemCandidates {
     /** Whole item name inside the question ("기계식 피스톤 만들고 싶어") beats single word hits. */
     private static int score(Candidate candidate, String query, List<String> tokens) {
         String name = candidate.name().toLowerCase(Locale.ROOT);
-        String id = candidate.key().id().toLowerCase(Locale.ROOT);
+        String id = candidate.key().uid().toLowerCase(Locale.ROOT);
         if (name.length() >= MIN_TOKEN_LENGTH && query.contains(name)) {
             return NAME_IN_QUERY_SCORE + name.length();
         }

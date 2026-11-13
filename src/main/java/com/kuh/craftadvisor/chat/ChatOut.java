@@ -5,7 +5,7 @@ import java.util.stream.Collectors;
 
 import com.kuh.craftadvisor.jei.Items;
 import com.kuh.craftadvisor.planner.CraftPlan;
-import com.kuh.craftadvisor.planner.ItemKey;
+import com.kuh.craftadvisor.planner.IngredientKey;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -57,7 +57,7 @@ public final class ChatOut {
         };
     }
 
-    private static String joinNames(List<ItemKey> items) {
+    private static String joinNames(List<IngredientKey> items) {
         return items.stream().map(item -> Items.nameOf(item).getString()).collect(Collectors.joining(", "));
     }
 

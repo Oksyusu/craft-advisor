@@ -6,7 +6,7 @@ import java.util.List;
 import com.kuh.craftadvisor.chat.ChatOut;
 import com.kuh.craftadvisor.jei.Items;
 import com.kuh.craftadvisor.planner.CraftPlan;
-import com.kuh.craftadvisor.planner.ItemKey;
+import com.kuh.craftadvisor.planner.IngredientKey;
 import com.simibubi.create.AllDataComponents;
 import com.simibubi.create.content.equipment.clipboard.ClipboardContent;
 import com.simibubi.create.content.equipment.clipboard.ClipboardEditPacket;
@@ -27,7 +27,7 @@ final class CreateClipboardWriter {
     private CreateClipboardWriter() {
     }
 
-    private static final ItemKey CLIPBOARD = ItemKey.of("create:clipboard");
+    private static final IngredientKey CLIPBOARD = IngredientKey.item("create:clipboard");
 
     static boolean isHoldingClipboard(LocalPlayer player) {
         ItemStack held = player.getMainHandItem();

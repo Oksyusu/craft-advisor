@@ -18,11 +18,11 @@ class CraftPlannerTest {
 
     /** Small hand-written recipe book standing in for JEI. */
     private static final class Book implements RecipeSource {
-        private final Map<ItemKey, List<RecipeOption>> recipes = new HashMap<>();
+        private final Map<IngredientKey, List<RecipeOption>> recipes = new HashMap<>();
 
         Book add(String output, int outputCount, List<String> machines, IngredientSlot... inputs) {
-            recipes.computeIfAbsent(ItemKey.of(output), k -> new ArrayList<>())
-                    .add(new RecipeOption(List.of(inputs), outputCount, machines.stream().map(ItemKey::of).toList()));
+            recipes.computeIfAbsent(IngredientKey.item(output), k -> new ArrayList<>())
+                    .add(new RecipeOption(List.of(inputs), outputCount, machines.stream().map(IngredientKey::item).toList()));
             return this;
         }
 
@@ -31,7 +31,7 @@ class CraftPlannerTest {
         }
 
         @Override
-        public List<RecipeOption> recipesFor(ItemKey item) {
+        public List<RecipeOption> recipesFor(IngredientKey item) {
             return recipes.getOrDefault(item, List.of());
         }
     }
@@ -41,19 +41,19 @@ class CraftPlannerTest {
     }
 
     private static IngredientSlot anyOf(int count, String... ids) {
-        return new IngredientSlot(Arrays.stream(ids).map(ItemKey::of).toList(), count);
+        return new IngredientSlot(Arrays.stream(ids).map(IngredientKey::item).toList(), count);
     }
 
-    private static Map<ItemKey, Integer> inv(Object... idCountPairs) {
-        Map<ItemKey, Integer> map = new HashMap<>();
+    private static Map<IngredientKey, Integer> inv(Object... idCountPairs) {
+        Map<IngredientKey, Integer> map = new HashMap<>();
         for (int i = 0; i < idCountPairs.length; i += 2) {
-            map.put(ItemKey.of((String) idCountPairs[i]), (Integer) idCountPairs[i + 1]);
+            map.put(IngredientKey.item((String) idCountPairs[i]), (Integer) idCountPairs[i + 1]);
         }
         return map;
     }
 
     private static Missing missing(String id, int count, StopReason reason) {
-        return new Missing(ItemKey.of(id), count, reason);
+        return new Missing(IngredientKey.item(id), count, reason);
     }
 
     private static Book vanillaPiston() {
@@ -72,19 +72,19 @@ class CraftPlannerTest {
 
     @Test
     void emptyInventoryExpandsVanillaPistonToRawMaterials() {
-        CraftPlan plan = new CraftPlanner(vanillaPiston()).plan(ItemKey.of("minecraft:piston"), 1, Map.of());
+        CraftPlan plan = new CraftPlanner(vanillaPiston()).plan(IngredientKey.item("minecraft:piston"), 1, Map.of());
 
         assertEquals(List.of(
                 missing("minecraft:oak_log", 1, StopReason.NO_RECIPE),
                 missing("minecraft:cobblestone", 4, StopReason.NO_RECIPE),
                 missing("minecraft:raw_iron", 1, StopReason.NO_RECIPE),
                 missing("minecraft:redstone", 1, StopReason.NO_RECIPE)), plan.missing());
-        assertEquals(List.of(ItemKey.of("minecraft:furnace")), plan.machines());
+        assertEquals(List.of(IngredientKey.item("minecraft:furnace")), plan.machines());
     }
 
     @Test
     void ownedItemsAreUsedBeforeCrafting() {
-        CraftPlan plan = new CraftPlanner(vanillaPiston()).plan(ItemKey.of("minecraft:piston"), 1,
+        CraftPlan plan = new CraftPlanner(vanillaPiston()).plan(IngredientKey.item("minecraft:piston"), 1,
                 inv("minecraft:oak_planks", 2, "minecraft:cobblestone", 10, "minecraft:iron_ingot", 1));
 
         assertEquals(List.of(
@@ -94,10 +94,10 @@ class CraftPlannerTest {
 
     @Test
     void anyAlternativeOfATagSlotSatisfiesIt() {
-        CraftPlan plan = new CraftPlanner(vanillaPiston()).plan(ItemKey.of("minecraft:piston"), 1,
+        CraftPlan plan = new CraftPlanner(vanillaPiston()).plan(IngredientKey.item("minecraft:piston"), 1,
                 inv("minecraft:spruce_planks", 3));
 
-        assertTrue(plan.missing().stream().noneMatch(m -> m.item().id().contains("log")));
+        assertTrue(plan.missing().stream().noneMatch(m -> m.item().uid().contains("log")));
     }
 
     @Test
@@ -107,12 +107,12 @@ class CraftPlannerTest {
                 .add("minecraft:stick", 4, slot("minecraft:oak_planks", 2))
                 .add("minecraft:oak_planks", 4, slot("minecraft:oak_log", 1));
 
-        CraftPlan plan = new CraftPlanner(book).plan(ItemKey.of("minecraft:ladder"), 3, Map.of());
+        CraftPlan plan = new CraftPlanner(book).plan(IngredientKey.item("minecraft:ladder"), 3, Map.of());
 
         // 7 sticks -> 2 crafts -> 4 planks -> 1 log
         assertEquals(List.of(missing("minecraft:oak_log", 1, StopReason.NO_RECIPE)), plan.missing());
         assertEquals(2, plan.steps().stream()
-                .filter(s -> s.item().id().equals("minecraft:stick")).findFirst().orElseThrow().crafts());
+                .filter(s -> s.item().uid().equals("minecraft:stick")).findFirst().orElseThrow().crafts());
     }
 
     @Test
@@ -121,7 +121,7 @@ class CraftPlannerTest {
                 .add("test:frame", 1, slot("minecraft:oak_planks", 2), slot("minecraft:oak_planks", 2))
                 .add("minecraft:oak_planks", 4, slot("minecraft:oak_log", 1));
 
-        CraftPlan plan = new CraftPlanner(book).plan(ItemKey.of("test:frame"), 1, Map.of());
+        CraftPlan plan = new CraftPlanner(book).plan(IngredientKey.item("test:frame"), 1, Map.of());
 
         assertEquals(List.of(missing("minecraft:oak_log", 1, StopReason.NO_RECIPE)), plan.missing());
     }
@@ -132,14 +132,14 @@ class CraftPlannerTest {
                 .add("test:a", 1, slot("test:b", 1))
                 .add("test:b", 1, slot("test:a", 1));
 
-        CraftPlan plan = new CraftPlanner(book).plan(ItemKey.of("test:a"), 1, Map.of());
+        CraftPlan plan = new CraftPlanner(book).plan(IngredientKey.item("test:a"), 1, Map.of());
 
         assertEquals(List.of(missing("test:b", 1, StopReason.CYCLE)), plan.missing());
     }
 
     @Test
     void decompressRecipeIsNotChosenForIronIngot() {
-        CraftPlan plan = new CraftPlanner(vanillaPiston()).plan(ItemKey.of("minecraft:iron_block"), 1, Map.of());
+        CraftPlan plan = new CraftPlanner(vanillaPiston()).plan(IngredientKey.item("minecraft:iron_block"), 1, Map.of());
 
         assertEquals(List.of(missing("minecraft:raw_iron", 9, StopReason.NO_RECIPE)), plan.missing());
     }
@@ -151,7 +151,7 @@ class CraftPlannerTest {
             book.add("test:i" + i, 1, slot("test:i" + (i + 1), 1));
         }
 
-        CraftPlan plan = new CraftPlanner(book).plan(ItemKey.of("test:i0"), 1, Map.of());
+        CraftPlan plan = new CraftPlanner(book).plan(IngredientKey.item("test:i0"), 1, Map.of());
 
         assertEquals(List.of(missing("test:i" + CraftPlanner.MAX_DEPTH, 1, StopReason.MAX_DEPTH)), plan.missing());
     }
@@ -162,7 +162,7 @@ class CraftPlannerTest {
                 .add("create:andesite_alloy", 2, slot("minecraft:andesite", 2), slot("minecraft:iron_nugget", 2))
                 .add("create:andesite_alloy", 2, slot("minecraft:andesite", 2), slot("create:zinc_nugget", 2));
 
-        CraftPlan plan = new CraftPlanner(book).plan(ItemKey.of("create:andesite_alloy"), 2,
+        CraftPlan plan = new CraftPlanner(book).plan(IngredientKey.item("create:andesite_alloy"), 2,
                 inv("minecraft:andesite", 2, "create:zinc_nugget", 2));
 
         assertEquals(List.of(), plan.missing());
@@ -173,17 +173,17 @@ class CraftPlannerTest {
         Book book = new Book()
                 .add("create:iron_sheet", 1, List.of("create:mechanical_press"), slot("minecraft:iron_ingot", 1));
 
-        CraftPlan plan = new CraftPlanner(book).plan(ItemKey.of("create:iron_sheet"), 4, Map.of());
+        CraftPlan plan = new CraftPlanner(book).plan(IngredientKey.item("create:iron_sheet"), 4, Map.of());
 
-        assertEquals(List.of(ItemKey.of("create:mechanical_press")), plan.machines());
+        assertEquals(List.of(IngredientKey.item("create:mechanical_press")), plan.machines());
         assertEquals(List.of(missing("minecraft:iron_ingot", 4, StopReason.NO_RECIPE)), plan.missing());
     }
 
     @Test
     void targetIsCraftedEvenWhenOwnedAndInventoryIsNotModified() {
-        Map<ItemKey, Integer> inventory = inv("minecraft:piston", 5);
+        Map<IngredientKey, Integer> inventory = inv("minecraft:piston", 5);
 
-        CraftPlan plan = new CraftPlanner(vanillaPiston()).plan(ItemKey.of("minecraft:piston"), 1, inventory);
+        CraftPlan plan = new CraftPlanner(vanillaPiston()).plan(IngredientKey.item("minecraft:piston"), 1, inventory);
 
         assertEquals(4, plan.missing().size());
         assertEquals(inv("minecraft:piston", 5), inventory);

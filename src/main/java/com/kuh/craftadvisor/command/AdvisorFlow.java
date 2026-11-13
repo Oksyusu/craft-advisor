@@ -24,7 +24,7 @@ import com.kuh.craftadvisor.jei.Items;
 import com.kuh.craftadvisor.jei.JeiRecipeSource;
 import com.kuh.craftadvisor.planner.CraftPlan;
 import com.kuh.craftadvisor.planner.CraftPlanner;
-import com.kuh.craftadvisor.planner.ItemKey;
+import com.kuh.craftadvisor.planner.IngredientKey;
 
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.recipe.RecipeIngredientRole;
@@ -69,28 +69,28 @@ final class AdvisorFlow {
             askFreeQuestion(ai.get(), query);
             return;
         }
-        List<String> lines = found.candidates().stream().map(c -> c.key().id() + " | " + c.name()).toList();
+        List<String> lines = found.candidates().stream().map(c -> c.key().uid() + " | " + c.name()).toList();
         onClientThread(ai.get().pickItem(query, lines), pick -> onPicked(runtime.get(), ai.get(), query, found, pick));
     }
 
     private static void onPicked(IJeiRuntime runtime, AiProvider ai, String query, ItemCandidates.Result found, ItemPick pick) {
         boolean known = pick.wantsCraft()
-                && found.candidates().stream().anyMatch(c -> c.key().id().equals(pick.itemId()));
+                && found.candidates().stream().anyMatch(c -> c.key().uid().equals(pick.itemId()));
         if (known) {
-            craft(runtime, ItemKey.of(pick.itemId()), query, Optional.of(ai));
+            craft(runtime, IngredientKey.item(pick.itemId()), query, Optional.of(ai));
         } else {
             askFreeQuestion(ai, query);
         }
     }
 
-    private static void craft(IJeiRuntime runtime, ItemKey target, String query, Optional<AiProvider> ai) {
+    private static void craft(IJeiRuntime runtime, IngredientKey target, String query, Optional<AiProvider> ai) {
         Minecraft minecraft = Minecraft.getInstance();
         ItemStack stack = Items.stackOf(target).orElse(ItemStack.EMPTY);
         if (minecraft.player == null || stack.isEmpty()) {
-            ChatOut.error("craftadvisor.msg.unknown_item", target.id());
+            ChatOut.error("craftadvisor.msg.unknown_item", target.uid());
             return;
         }
-        Map<ItemKey, Integer> inventory = Items.countAll(minecraft.player.getInventory());
+        Map<IngredientKey, Integer> inventory = Items.countAll(minecraft.player.getInventory());
         CraftPlan plan = new CraftPlanner(new JeiRecipeSource(runtime)).plan(target, TARGET_AMOUNT, inventory);
 
         runtime.getRecipesGui().show(runtime.getJeiHelpers().getFocusFactory()
@@ -160,8 +160,8 @@ final class AdvisorFlow {
         return GSON.toJson(json);
     }
 
-    private static String name(ItemKey key) {
-        return Items.nameOf(key).getString() + " (" + key.id() + ")";
+    private static String name(IngredientKey key) {
+        return Items.nameOf(key).getString() + " (" + key.uid() + ")";
     }
 
     private static String inventorySummary() {
@@ -170,7 +170,7 @@ final class AdvisorFlow {
             return "unknown";
         }
         return Items.countAll(minecraft.player.getInventory()).entrySet().stream()
-                .sorted(Map.Entry.<ItemKey, Integer>comparingByValue(Comparator.reverseOrder()))
+                .sorted(Map.Entry.<IngredientKey, Integer>comparingByValue(Comparator.reverseOrder()))
                 .limit(INVENTORY_SUMMARY_ITEMS)
                 .map(e -> Items.nameOf(e.getKey()).getString() + " x" + e.getValue())
                 .collect(Collectors.joining(", "));

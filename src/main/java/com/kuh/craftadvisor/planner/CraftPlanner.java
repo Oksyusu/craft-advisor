@@ -29,7 +29,7 @@ public final class CraftPlanner {
         this.recipes = recipes;
     }
 
-    public CraftPlan plan(ItemKey target, int amount, Map<ItemKey, Integer> inventory) {
+    public CraftPlan plan(IngredientKey target, int amount, Map<IngredientKey, Integer> inventory) {
         Run run = new Run(new HashMap<>(inventory));
         run.craft(target, amount, 0, List.of());
         List<CraftPlan.Missing> missing = new ArrayList<>();
@@ -39,23 +39,23 @@ public final class CraftPlanner {
 
     /** Mutable working state of one planning call. */
     private final class Run {
-        private final Map<ItemKey, Integer> pool;
+        private final Map<IngredientKey, Integer> pool;
         private final List<CraftPlan.Step> steps = new ArrayList<>();
-        private final Map<ItemKey, Integer> missing = new LinkedHashMap<>();
-        private final Map<ItemKey, CraftPlan.StopReason> reasons = new HashMap<>();
-        private final Set<ItemKey> machines = new LinkedHashSet<>();
+        private final Map<IngredientKey, Integer> missing = new LinkedHashMap<>();
+        private final Map<IngredientKey, CraftPlan.StopReason> reasons = new HashMap<>();
+        private final Set<IngredientKey> machines = new LinkedHashSet<>();
 
-        private Run(Map<ItemKey, Integer> pool) {
+        private Run(Map<IngredientKey, Integer> pool) {
             this.pool = pool;
         }
 
         /** The target (depth 0) is always crafted, even if the player already owns some. */
-        private void craft(ItemKey item, int needed, int depth, List<ItemKey> path) {
+        private void craft(IngredientKey item, int needed, int depth, List<IngredientKey> path) {
             if (depth >= MAX_DEPTH) {
                 addMissing(item, needed, CraftPlan.StopReason.MAX_DEPTH);
                 return;
             }
-            List<ItemKey> nextPath = append(path, item);
+            List<IngredientKey> nextPath = append(path, item);
             List<RecipeOption> usable = recipes.recipesFor(item).stream()
                     .filter(recipe -> nextPath.stream().noneMatch(recipe::uses))
                     .toList();
@@ -81,7 +81,7 @@ public final class CraftPlanner {
         }
 
         /** Ingredients below the target: use what the pool still has, craft the rest. */
-        private void obtain(ItemKey item, int needed, int depth, List<ItemKey> path) {
+        private void obtain(IngredientKey item, int needed, int depth, List<IngredientKey> path) {
             int remaining = take(item, needed);
             if (remaining > 0) {
                 craft(item, remaining, depth, path);
@@ -114,7 +114,7 @@ public final class CraftPlanner {
 
         private int takeFromPool(IngredientSlot slot, int needed) {
             int remaining = needed;
-            for (ItemKey alt : slot.alternatives()) {
+            for (IngredientKey alt : slot.alternatives()) {
                 remaining = take(alt, remaining);
                 if (remaining == 0) {
                     break;
@@ -123,7 +123,7 @@ public final class CraftPlanner {
             return remaining;
         }
 
-        private int take(ItemKey item, int needed) {
+        private int take(IngredientKey item, int needed) {
             int owned = pool.getOrDefault(item, 0);
             int used = Math.min(owned, needed);
             if (used > 0) {
@@ -132,14 +132,14 @@ public final class CraftPlanner {
             return needed - used;
         }
 
-        private void addMissing(ItemKey item, int count, CraftPlan.StopReason reason) {
+        private void addMissing(IngredientKey item, int count, CraftPlan.StopReason reason) {
             missing.merge(item, count, Integer::sum);
             reasons.putIfAbsent(item, reason);
         }
     }
 
-    private static List<ItemKey> append(List<ItemKey> path, ItemKey item) {
-        List<ItemKey> next = new ArrayList<>(path);
+    private static List<IngredientKey> append(List<IngredientKey> path, IngredientKey item) {
+        List<IngredientKey> next = new ArrayList<>(path);
         next.add(item);
         return List.copyOf(next);
     }

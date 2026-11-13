@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.kuh.craftadvisor.planner.IngredientKey;
 import com.kuh.craftadvisor.planner.IngredientSlot;
-import com.kuh.craftadvisor.planner.ItemKey;
 import com.kuh.craftadvisor.planner.RecipeOption;
 import com.kuh.craftadvisor.planner.RecipeSource;
 
@@ -31,18 +31,18 @@ import net.minecraft.world.item.ItemStack;
  */
 public final class JeiRecipeSource implements RecipeSource {
     private final IJeiRuntime runtime;
-    private final Map<ItemKey, List<RecipeOption>> cache = new HashMap<>();
+    private final Map<IngredientKey, List<RecipeOption>> cache = new HashMap<>();
 
     public JeiRecipeSource(IJeiRuntime runtime) {
         this.runtime = runtime;
     }
 
     @Override
-    public List<RecipeOption> recipesFor(ItemKey item) {
+    public List<RecipeOption> recipesFor(IngredientKey item) {
         return cache.computeIfAbsent(item, this::lookup);
     }
 
-    private List<RecipeOption> lookup(ItemKey item) {
+    private List<RecipeOption> lookup(IngredientKey item) {
         Optional<ItemStack> stack = Items.stackOf(item);
         if (stack.isEmpty()) {
             return List.of();
@@ -59,8 +59,8 @@ public final class JeiRecipeSource implements RecipeSource {
     }
 
     private static <T> void collect(IRecipeManager recipeManager, IRecipeCategory<T> category, IFocus<ItemStack> focus,
-                                    IFocusGroup focusGroup, ItemKey item, List<RecipeOption> out) {
-        List<ItemKey> machines = recipeManager.createRecipeCatalystLookup(category.getRecipeType())
+                                    IFocusGroup focusGroup, IngredientKey item, List<RecipeOption> out) {
+        List<IngredientKey> machines = recipeManager.createRecipeCatalystLookup(category.getRecipeType())
                 .getItemStack()
                 .findFirst()
                 .map(Items::keyOf)
@@ -72,7 +72,7 @@ public final class JeiRecipeSource implements RecipeSource {
                         .ifPresent(out::add));
     }
 
-    private static <T> Optional<RecipeOption> toOption(IRecipeLayoutDrawable<T> layout, ItemKey item, List<ItemKey> machines) {
+    private static <T> Optional<RecipeOption> toOption(IRecipeLayoutDrawable<T> layout, IngredientKey item, List<IngredientKey> machines) {
         var slots = layout.getRecipeSlotsView();
         List<IngredientSlot> inputs = new ArrayList<>();
         for (IRecipeSlotView slot : slots.getSlotViews(RecipeIngredientRole.INPUT)) {
@@ -80,7 +80,7 @@ public final class JeiRecipeSource implements RecipeSource {
             if (stacks.isEmpty()) {
                 continue; // empty grid cell, or a fluid / non-item ingredient
             }
-            LinkedHashSet<ItemKey> alternatives = new LinkedHashSet<>();
+            LinkedHashSet<IngredientKey> alternatives = new LinkedHashSet<>();
             stacks.forEach(s -> alternatives.add(Items.keyOf(s)));
             inputs.add(new IngredientSlot(List.copyOf(alternatives), stacks.get(0).getCount()));
         }
